@@ -1,0 +1,240 @@
+import { useState, type FormEvent } from 'react';
+import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { upsertGuildLeagueSignup } from '../lib/supabase';
+import type { FieldType } from '../types/signup';
+import { JobDropdown } from './JobDropdown';
+
+interface RegistrationFormProps {
+  onSuccess: () => Promise<void> | void;
+}
+
+function validateNickname(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return 'Nick in game wajib diisi.';
+  }
+  if (trimmed.length < 2) {
+    return 'Nick minimal 2 karakter.';
+  }
+  if (trimmed.length > 24) {
+    return 'Nick maksimal 24 karakter.';
+  }
+  return null;
+}
+
+export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
+  const [nickname, setNickname] = useState('');
+  const [job, setJob] = useState('');
+  const [field, setField] = useState<FieldType | null>(null);
+
+  const [nickTouched, setNickTouched] = useState(false);
+  const [jobTouched, setJobTouched] = useState(false);
+  const [fieldTouched, setFieldTouched] = useState(false);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const nickError = validateNickname(nickname);
+  const jobError = job ? null : 'Pilih salah satu job.';
+  const fieldError = field ? null : 'Pilih Main Field atau Sub Field.';
+
+  const isFormValid = !nickError && !jobError && !fieldError;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setNickTouched(true);
+    setJobTouched(true);
+    setFieldTouched(true);
+
+    if (!isFormValid || !field || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedback(null);
+
+    try {
+      const result = await upsertGuildLeagueSignup({
+        nickname,
+        job,
+        field,
+      });
+
+      setNickname('');
+      setJob('');
+      setField(null);
+      setNickTouched(false);
+      setJobTouched(false);
+      setFieldTouched(false);
+
+      setFeedback({
+        type: 'success',
+        message:
+          result.action === 'updated' ? 'Data kamu diperbarui' : 'Berhasil terdaftar',
+      });
+
+      await onSuccess();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.';
+      setFeedback({
+        type: 'error',
+        message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="form-heading">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-7">
+        <div className="mb-5">
+          <h2 id="form-heading" className="text-lg sm:text-xl font-bold text-slate-900">
+            Form Pendaftaran
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Masukkan nick in game, pilih job karakter, lalu pilih Main Field atau Sub Field dan
+            tekan Daftar.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <div>
+            <label
+              htmlFor="nickname-input"
+              className="block text-sm font-semibold text-slate-800 mb-1.5"
+            >
+              Nick In Game
+            </label>
+            <input
+              id="nickname-input"
+              name="nickname"
+              type="text"
+              autoComplete="off"
+              maxLength={32}
+              value={nickname}
+              disabled={isSubmitting}
+              placeholder="Contoh: ValkyrieID"
+              aria-invalid={Boolean(nickTouched && nickError)}
+              aria-describedby={nickTouched && nickError ? 'nickname-error' : undefined}
+              onChange={(e) => {
+                setNickname(e.target.value);
+                if (feedback) setFeedback(null);
+              }}
+              onBlur={() => setNickTouched(true)}
+              className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border bg-white text-base text-slate-900 placeholder:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-60 disabled:bg-slate-50 ${
+                nickTouched && nickError
+                  ? 'border-red-400 focus-visible:border-red-500'
+                  : 'border-slate-300 hover:border-slate-400'
+              }`}
+            />
+            {nickTouched && nickError && (
+              <p id="nickname-error" className="mt-1.5 text-xs font-medium text-red-600" role="alert">
+                {nickError}
+              </p>
+            )}
+          </div>
+
+          <JobDropdown
+            value={job}
+            disabled={isSubmitting}
+            error={jobTouched && jobError ? jobError : undefined}
+            onChange={(selectedJob) => {
+              setJob(selectedJob);
+              setJobTouched(true);
+              if (feedback) setFeedback(null);
+            }}
+            onBlur={() => setJobTouched(true)}
+          />
+
+          <div>
+            <span
+              id="field-group-label"
+              className="block text-sm font-semibold text-slate-800 mb-1.5"
+            >
+              Field
+            </span>
+            <div
+              role="group"
+              aria-labelledby="field-group-label"
+              className="grid grid-cols-2 gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200"
+            >
+              {(
+                [
+                  { id: 'main', label: 'Main Field' },
+                  { id: 'sub', label: 'Sub Field' },
+                ] as const
+              ).map((option) => {
+                const isSelected = field === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    disabled={isSubmitting}
+                    aria-pressed={isSelected}
+                    onClick={() => {
+                      setField(option.id);
+                      setFieldTouched(true);
+                      if (feedback) setFeedback(null);
+                    }}
+                    className={`min-h-[48px] px-4 py-2.5 rounded-lg text-sm sm:text-base font-semibold whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${
+                      isSelected
+                        ? 'bg-[#3730A3] text-white shadow-xs'
+                        : 'bg-transparent text-slate-700 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            {fieldTouched && fieldError && (
+              <p className="mt-1.5 text-xs font-medium text-red-600" role="alert">
+                {fieldError}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={!isFormValid || isSubmitting}
+            className="w-full min-h-[48px] px-5 py-3 rounded-xl text-base font-semibold text-white bg-[#3730A3] hover:bg-[#312E81] active:scale-[0.99] transition-all duration-150 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed disabled:active:scale-100"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin" />
+                <span>Menyimpan...</span>
+              </>
+            ) : (
+              <span>Daftar</span>
+            )}
+          </button>
+
+          {feedback && (
+            <div
+              role={feedback.type === 'error' ? 'alert' : 'status'}
+              className={`rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-2.5 border ${
+                feedback.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-red-50 border-red-200 text-red-900'
+              }`}
+            >
+              {feedback.type === 'success' ? (
+                <CheckCircle2 aria-hidden="true" className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle aria-hidden="true" className="w-5 h-5 text-red-700 shrink-0 mt-0.5" />
+              )}
+              <span>{feedback.message}</span>
+            </div>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+}
