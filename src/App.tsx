@@ -38,7 +38,7 @@ export default function App() {
             Ragnarok: The New World
           </p>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-balance">
-            Pendataan Event Guild League
+            Pendataan Event Guild League OLIGARKI
           </h1>
           <p className="text-sm sm:text-base text-slate-600">
             Daftarkan nick in game, pilih job, dan tentukan field kamu.

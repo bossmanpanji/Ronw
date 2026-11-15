@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Check, ChevronDown, Search } from 'lucide-react';
 import { JOBS, type JobOption } from '../constants/jobs';
 
 interface JobDropdownProps {
@@ -19,9 +19,11 @@ export function JobDropdown({
 }: JobDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const labelId = useId();
@@ -29,7 +31,17 @@ export function JobDropdown({
   const errorId = useId();
 
   const selectedJob: JobOption | undefined = JOBS.find((item) => item.name === value);
-  const selectedIndex = JOBS.findIndex((item) => item.name === value);
+
+  const filteredJobs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return JOBS;
+    return JOBS.filter(
+      (item) =>
+        item.name.toLowerCase().includes(query) || item.group.toLowerCase().includes(query),
+    );
+  }, [searchQuery]);
+
+  const selectedFilteredIndex = filteredJobs.findIndex((item) => item.name === value);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -37,6 +49,7 @@ export function JobDropdown({
     function handlePointerDown(event: PointerEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setSearchQuery('');
         onBlur?.();
       }
     }
@@ -55,67 +68,88 @@ export function JobDropdown({
 
   function openDropdown(initialIndex?: number) {
     if (disabled) return;
-    const fallbackIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    setSearchQuery('');
+    const fullIndex = JOBS.findIndex((item) => item.name === value);
+    const fallbackIndex = fullIndex >= 0 ? fullIndex : 0;
     setActiveIndex(initialIndex !== undefined ? initialIndex : fallbackIndex);
     setIsOpen(true);
   }
 
   function closeDropdown(returnFocus: boolean) {
     setIsOpen(false);
+    setSearchQuery('');
     if (returnFocus) {
       triggerRef.current?.focus();
     }
   }
 
   function selectByIndex(index: number) {
-    const chosen = JOBS[index];
+    const chosen = filteredJobs[index];
     if (!chosen) return;
     onChange(chosen.name);
     closeDropdown(true);
   }
 
-  function handleTriggerKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+  function handleNavigationKeyDown(
+    event: KeyboardEvent<HTMLButtonElement | HTMLInputElement>,
+    allowSpaceSelect: boolean,
+  ) {
     if (disabled) return;
 
     switch (event.key) {
       case 'ArrowDown': {
         event.preventDefault();
         if (!isOpen) {
-          openDropdown(selectedIndex >= 0 ? selectedIndex : 0);
-        } else {
-          setActiveIndex((prev) => (prev + 1) % JOBS.length);
+          openDropdown(selectedFilteredIndex >= 0 ? selectedFilteredIndex : 0);
+        } else if (filteredJobs.length > 0) {
+          setActiveIndex((prev) => (prev + 1) % filteredJobs.length);
         }
         break;
       }
       case 'ArrowUp': {
         event.preventDefault();
         if (!isOpen) {
-          openDropdown(selectedIndex >= 0 ? selectedIndex : JOBS.length - 1);
-        } else {
-          setActiveIndex((prev) => (prev <= 0 ? JOBS.length - 1 : prev - 1));
+          openDropdown(
+            selectedFilteredIndex >= 0 ? selectedFilteredIndex : filteredJobs.length - 1,
+          );
+        } else if (filteredJobs.length > 0) {
+          setActiveIndex((prev) => (prev <= 0 ? filteredJobs.length - 1 : prev - 1));
         }
         break;
       }
       case 'Home': {
-        if (isOpen) {
+        if (isOpen && allowSpaceSelect && filteredJobs.length > 0) {
           event.preventDefault();
           setActiveIndex(0);
         }
         break;
       }
       case 'End': {
-        if (isOpen) {
+        if (isOpen && allowSpaceSelect && filteredJobs.length > 0) {
           event.preventDefault();
-          setActiveIndex(JOBS.length - 1);
+          setActiveIndex(filteredJobs.length - 1);
         }
         break;
       }
-      case 'Enter':
-      case ' ': {
+      case 'Enter': {
         event.preventDefault();
         if (!isOpen) {
           openDropdown();
-        } else if (activeIndex >= 0) {
+        } else if (activeIndex >= 0 && filteredJobs[activeIndex]) {
+          selectByIndex(activeIndex);
+        } else if (filteredJobs.length === 1) {
+          selectByIndex(0);
+        } else {
+          closeDropdown(true);
+        }
+        break;
+      }
+      case ' ': {
+        if (!allowSpaceSelect) return;
+        event.preventDefault();
+        if (!isOpen) {
+          openDropdown();
+        } else if (activeIndex >= 0 && filteredJobs[activeIndex]) {
           selectByIndex(activeIndex);
         } else {
           closeDropdown(true);
@@ -131,8 +165,15 @@ export function JobDropdown({
         break;
       }
       case 'Tab': {
+        if (isOpen && event.currentTarget === searchInputRef.current && event.shiftKey) {
+          return;
+        }
+        if (isOpen && event.currentTarget === triggerRef.current && !event.shiftKey) {
+          return;
+        }
         if (isOpen) {
           setIsOpen(false);
+          setSearchQuery('');
           onBlur?.();
         }
         break;
@@ -141,7 +182,9 @@ export function JobDropdown({
   }
 
   const activeOptionId =
-    isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
+    isOpen && activeIndex >= 0 && filteredJobs[activeIndex]
+      ? `${listboxId}-option-${activeIndex}`
+      : undefined;
 
   return (
     <div ref={containerRef} className="relative">
@@ -178,7 +221,7 @@ export function JobDropdown({
             openDropdown();
           }
         }}
-        onKeyDown={handleTriggerKeyDown}
+        onKeyDown={(e) => handleNavigationKeyDown(e, true)}
         style={
           selectedJob
             ? {
@@ -222,49 +265,92 @@ export function JobDropdown({
       </button>
 
       {isOpen && (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-labelledby={labelId}
-          tabIndex={-1}
-          className="absolute z-30 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 max-h-72 overflow-y-auto focus:outline-none"
-        >
-          {JOBS.map((job, index) => {
-            const isSelected = job.name === value;
-            const isActive = index === activeIndex;
-
-            return (
-              <button
-                key={job.name}
-                ref={(el) => {
-                  optionRefs.current[index] = el;
+        <div className="absolute z-30 left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setActiveIndex(0);
                 }}
-                id={`${listboxId}-option-${index}`}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                tabIndex={-1}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => selectByIndex(index)}
-                className={`w-full min-h-[44px] px-3.5 py-2 text-left text-sm flex items-center justify-between gap-3 transition-colors ${
-                  isActive ? 'bg-slate-100' : 'bg-white hover:bg-slate-50'
-                } ${isSelected ? 'font-semibold text-slate-900' : 'font-medium text-slate-800'}`}
-              >
-                <span className="flex items-center gap-3 min-w-0">
-                  <span
-                    aria-hidden="true"
-                    className="w-4 h-4 rounded-md shrink-0 border border-black/10"
-                    style={{ backgroundColor: job.color }}
-                  />
-                  <span className="truncate">{job.name}</span>
-                </span>
+                onKeyDown={(e) => handleNavigationKeyDown(e, false)}
+                placeholder="Cari job (contoh: Rune Knight, Alithea)..."
+                aria-label="Cari job"
+                className="w-full min-h-[44px] pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+              />
+            </div>
+          </div>
 
-                {isSelected && (
-                  <Check aria-hidden="true" className="w-4 h-4 text-[#3730A3] shrink-0" />
-                )}
-              </button>
-            );
-          })}
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-labelledby={labelId}
+            tabIndex={-1}
+            className="py-1.5 max-h-72 overflow-y-auto focus:outline-none"
+          >
+            {filteredJobs.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-slate-500">
+                Job tidak ditemukan.
+              </div>
+            ) : (
+              filteredJobs.map((job, index) => {
+                const isSelected = job.name === value;
+                const isActive = index === activeIndex;
+                const prevGroup = index > 0 ? filteredJobs[index - 1]?.group : null;
+                const showGroupHeader = job.group !== prevGroup;
+
+                return (
+                  <div key={job.name} role="none">
+                    {showGroupHeader && (
+                      <div
+                        role="presentation"
+                        className={`px-3.5 pt-2 pb-1 text-xs font-semibold text-slate-400 ${
+                          index > 0 ? 'border-t border-slate-100 mt-1' : ''
+                        }`}
+                      >
+                        {job.group}
+                      </div>
+                    )}
+                    <button
+                      ref={(el) => {
+                        optionRefs.current[index] = el;
+                      }}
+                      id={`${listboxId}-option-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      tabIndex={-1}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => selectByIndex(index)}
+                      className={`w-full min-h-[44px] px-3.5 py-2 text-left text-sm flex items-center justify-between gap-3 transition-colors ${
+                        isActive ? 'bg-slate-100' : 'bg-white hover:bg-slate-50'
+                      } ${isSelected ? 'font-semibold text-slate-900' : 'font-medium text-slate-800'}`}
+                    >
+                      <span className="flex items-center gap-3 min-w-0">
+                        <span
+                          aria-hidden="true"
+                          className="w-4 h-4 rounded-md shrink-0 border border-black/10"
+                          style={{ backgroundColor: job.color }}
+                        />
+                        <span className="truncate">{job.name}</span>
+                      </span>
+
+                      {isSelected && (
+                        <Check aria-hidden="true" className="w-4 h-4 text-[#3730A3] shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
