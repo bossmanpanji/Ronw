@@ -3,21 +3,29 @@ import { AlertCircle, Loader2, Search, X } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
 import {
   DIVISIONS,
+  makeDivisionTitleKey,
+  makeTeamTitleKey,
   SLOTS_PER_TEAM,
   TEAMS_PER_DIVISION,
   type DivisionId,
 } from '../constants/teams';
 import { clearGuildLeagueTeamSlot, upsertGuildLeagueTeamSlot } from '../lib/supabase';
-import type { GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
+import type {
+  GuildLeagueRosterTitle,
+  GuildLeagueSignup,
+  GuildLeagueTeamSlot,
+} from '../types/signup';
 
 interface MemberPickerModalProps {
   division: DivisionId;
   divisionLabel: string;
   teamNumber: number;
+  teamLabel?: string;
   slotNumber: number;
   currentSlot: GuildLeagueTeamSlot | undefined;
   signups: GuildLeagueSignup[];
   allSlots: GuildLeagueTeamSlot[];
+  rosterTitles?: GuildLeagueRosterTitle[];
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -26,10 +34,12 @@ export function MemberPickerModal({
   division,
   divisionLabel,
   teamNumber,
+  teamLabel,
   slotNumber,
   currentSlot,
   signups,
   allSlots,
+  rosterTitles = [],
   onClose,
   onSaved,
 }: MemberPickerModalProps) {
@@ -57,6 +67,17 @@ export function MemberPickerModal({
     }
     return map;
   }, []);
+
+  const titleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of rosterTitles) {
+      map.set(item.title_key, item.title);
+    }
+    return map;
+  }, [rosterTitles]);
+
+  const resolvedTeamLabel =
+    teamLabel ?? titleMap.get(makeTeamTitleKey(division, teamNumber)) ?? `Team ${teamNumber}`;
 
   const assignmentsBySignupId = useMemo(() => {
     const map = new Map<string, GuildLeagueTeamSlot[]>();
@@ -148,7 +169,7 @@ export function MemberPickerModal({
                 Pilih Anggota
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-                {divisionLabel} · Team {teamNumber} · Slot {slotNumber}
+                {divisionLabel} · {resolvedTeamLabel} · Slot {slotNumber}
               </p>
             </div>
             <button
@@ -240,7 +261,13 @@ export function MemberPickerModal({
                       <div className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         {sameDivisionSlot && (
                           <span className="text-amber-700 font-medium">
-                            Sudah di Team {sameDivisionSlot.team_number}
+                            Sudah di{' '}
+                            {titleMap.get(
+                              makeTeamTitleKey(
+                                sameDivisionSlot.division,
+                                sameDivisionSlot.team_number,
+                              ),
+                            ) ?? `Team ${sameDivisionSlot.team_number}`}
                           </span>
                         )}
                         {!sameDivisionSlot && otherDivisionSlots.length > 0 && (
@@ -248,6 +275,13 @@ export function MemberPickerModal({
                             <span>Terisi di:</span>
                             {otherDivisionSlots.map((s) => {
                               const divInfo = divisionMap.get(s.division);
+                              const customDivLabel =
+                                titleMap.get(makeDivisionTitleKey(s.division)) ??
+                                divInfo?.label ??
+                                s.division;
+                              const customTeamLabel =
+                                titleMap.get(makeTeamTitleKey(s.division, s.team_number)) ??
+                                `T${s.team_number}`;
                               return (
                                 <span
                                   key={s.slot_key}
@@ -259,7 +293,7 @@ export function MemberPickerModal({
                                     style={{ backgroundColor: divInfo?.color ?? '#64748B' }}
                                   />
                                   <span>
-                                    {divInfo?.label ?? s.division} (T{s.team_number})
+                                    {customDivLabel} ({customTeamLabel})
                                   </span>
                                 </span>
                               );

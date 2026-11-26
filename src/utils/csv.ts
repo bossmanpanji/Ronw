@@ -1,7 +1,15 @@
-import { DIVISIONS, makeSlotKey, SLOTS_PER_TEAM, TEAMS_PER_DIVISION } from '../constants/teams';
+import {
+  DIVISIONS,
+  makeDivisionTitleKey,
+  makeSlotKey,
+  makeTeamTitleKey,
+  SLOTS_PER_TEAM,
+  TEAMS_PER_DIVISION,
+} from '../constants/teams';
 import type {
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
+  GuildLeagueRosterTitle,
   GuildLeagueSignup,
   GuildLeagueTeamSlot,
 } from '../types/signup';
@@ -71,6 +79,7 @@ export function downloadSignupsCsv(signups: GuildLeagueSignup[]): void {
 export function downloadTeamRosterCsv(
   signups: GuildLeagueSignup[],
   teamSlots: GuildLeagueTeamSlot[],
+  rosterTitles: GuildLeagueRosterTitle[] = [],
 ): void {
   const signupMap = new Map<string, GuildLeagueSignup>();
   for (const member of signups) {
@@ -82,18 +91,25 @@ export function downloadTeamRosterCsv(
     slotMap.set(slot.slot_key, slot);
   }
 
+  const titleMap = new Map<string, string>();
+  for (const item of rosterTitles) {
+    titleMap.set(item.title_key, item.title);
+  }
+
   const headers = ['Divisi', 'Team', 'Slot', 'Nick In Game', 'Job'];
   const rows: (string | number)[][] = [];
 
   for (const division of DIVISIONS) {
+    const divisionLabel = titleMap.get(makeDivisionTitleKey(division.id)) ?? division.label;
     for (let team = 1; team <= TEAMS_PER_DIVISION; team += 1) {
+      const teamLabel = titleMap.get(makeTeamTitleKey(division.id, team)) ?? `Team ${team}`;
       for (let slotNum = 1; slotNum <= SLOTS_PER_TEAM; slotNum += 1) {
         const slot = slotMap.get(makeSlotKey(division.id, team, slotNum));
         const member = slot ? signupMap.get(slot.signup_id) : undefined;
         if (member) {
           rows.push([
-            division.label,
-            `Team ${team}`,
+            divisionLabel,
+            teamLabel,
             slotNum,
             member.nickname,
             member.job,

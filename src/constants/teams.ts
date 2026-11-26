@@ -59,3 +59,11 @@ export const DIVISIONS: readonly DivisionConfig[] = [
 export function makeSlotKey(division: DivisionId, teamNumber: number, slotNumber: number): string {
   return `${division}:${teamNumber}:${slotNumber}`;
 }
+
+export function makeDivisionTitleKey(division: DivisionId): string {
+  return `division:${division}`;
+}
+
+export function makeTeamTitleKey(division: DivisionId, teamNumber: number): string {
+  return `team:${division}:${teamNumber}`;
+}

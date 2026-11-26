@@ -10,12 +10,14 @@ import { Toast, type ToastData } from './components/Toast';
 import {
   fetchGuildLeagueFixedParties,
   fetchGuildLeagueFixedPartySlots,
+  fetchGuildLeagueRosterTitles,
   fetchGuildLeagueSignups,
   fetchGuildLeagueTeamSlots,
 } from './lib/supabase';
 import type {
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
+  GuildLeagueRosterTitle,
   GuildLeagueSignup,
   GuildLeagueTeamSlot,
 } from './types/signup';
@@ -38,6 +40,8 @@ export default function App() {
   const [fixedPartySlots, setFixedPartySlots] = useState<GuildLeagueFixedPartySlot[]>([]);
   const [isPartiesLoading, setIsPartiesLoading] = useState(true);
   const [partiesError, setPartiesError] = useState<string | null>(null);
+
+  const [rosterTitles, setRosterTitles] = useState<GuildLeagueRosterTitle[]>([]);
 
   const showToast = useCallback((nextToast: Omit<ToastData, 'id'>) => {
     setToast({
@@ -105,9 +109,23 @@ export default function App() {
     }
   }, []);
 
+  const loadRosterTitles = useCallback(async () => {
+    try {
+      const data = await fetchGuildLeagueRosterTitles();
+      setRosterTitles(data);
+    } catch {
+      // Keep existing labels if custom titles fail to load silently
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadSignups(), loadTeamSlots(), loadFixedParties()]);
-  }, [loadSignups, loadTeamSlots, loadFixedParties]);
+    await Promise.all([
+      loadSignups(),
+      loadTeamSlots(),
+      loadFixedParties(),
+      loadRosterTitles(),
+    ]);
+  }, [loadSignups, loadTeamSlots, loadFixedParties, loadRosterTitles]);
 
   useEffect(() => {
     void refreshAll();
@@ -207,9 +225,11 @@ export default function App() {
             <TeamRosterTab
               signups={signups}
               teamSlots={teamSlots}
+              rosterTitles={rosterTitles}
               isLoading={isSignupsLoading || isSlotsLoading}
               error={slotsError ?? signupsError}
               onRefresh={refreshAll}
+              onNotify={showToast}
             />
           ) : (
             <PartyTetapTab

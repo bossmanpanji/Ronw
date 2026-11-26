@@ -33,3 +33,9 @@ export interface GuildLeagueFixedPartySlot {
   signup_id: string;
   updated_at: string;
 }
+
+export interface GuildLeagueRosterTitle {
+  title_key: string;
+  title: string;
+  updated_at: string;
+}

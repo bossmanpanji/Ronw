@@ -3,6 +3,7 @@ import { makeSlotKey, type DivisionId } from '../constants/teams';
 import type {
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
+  GuildLeagueRosterTitle,
   GuildLeagueSignup,
   GuildLeagueTeamSlot,
 } from '../types/signup';
@@ -15,6 +16,7 @@ const TABLE_NAME = 'guild_league_signups';
 const TEAM_SLOTS_TABLE = 'guild_league_team_slots';
 const FIXED_PARTIES_TABLE = 'guild_league_fixed_parties';
 const FIXED_PARTY_SLOTS_TABLE = 'guild_league_fixed_party_slots';
+const ROSTER_TITLES_TABLE = 'guild_league_roster_titles';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -80,6 +82,9 @@ function toFriendlyErrorMessage(error: unknown, fallback: string): string {
       }
       if (raw.includes(FIXED_PARTIES_TABLE) || raw.includes(FIXED_PARTY_SLOTS_TABLE)) {
         return 'Tabel Party Tetap belum dibuat di Supabase. Jalankan skrip SQL Party Tetap di Supabase SQL Editor terlebih dahulu.';
+      }
+      if (raw.includes(ROSTER_TITLES_TABLE)) {
+        return 'Tabel judul team belum dibuat di Supabase. Jalankan skrip SQL judul team di Supabase SQL Editor terlebih dahulu.';
       }
       return 'Tabel guild_league_signups belum ditemukan. Jalankan skrip SQL di Supabase SQL Editor terlebih dahulu.';
     }
@@ -435,6 +440,85 @@ export async function clearGuildLeagueFixedPartySlot(slotKey: string): Promise<v
   if (error) {
     throw new Error(
       toFriendlyErrorMessage(error, 'Gagal mengosongkan slot party tetap. Silakan coba lagi.'),
+    );
+  }
+}
+
+function isMissingTableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = 'code' in error ? String((error as { code: unknown }).code) : '';
+  const raw =
+    'message' in error ? String((error as { message: unknown }).message).toLowerCase() : '';
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    raw.includes('schema cache') ||
+    (raw.includes('relation') && raw.includes('does not exist'))
+  );
+}
+
+export async function fetchGuildLeagueRosterTitles(): Promise<GuildLeagueRosterTitle[]> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from(ROSTER_TITLES_TABLE)
+    .select('title_key, title, updated_at');
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat judul team. Silakan coba muat ulang.'),
+    );
+  }
+
+  return (data ?? []) as GuildLeagueRosterTitle[];
+}
+
+export async function upsertGuildLeagueRosterTitle(
+  titleKey: string,
+  title: string,
+): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const cleanTitle = title.trim();
+  const { error } = await client.from(ROSTER_TITLES_TABLE).upsert(
+    {
+      title_key: titleKey,
+      title: cleanTitle,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'title_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menyimpan judul team. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function deleteGuildLeagueRosterTitle(titleKey: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { error } = await client
+    .from(ROSTER_TITLES_TABLE)
+    .delete()
+    .eq('title_key', titleKey);
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal mereset judul team. Silakan coba lagi.'),
     );
   }
 }
