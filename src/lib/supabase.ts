@@ -106,7 +106,7 @@ export async function fetchGuildLeagueSignups(): Promise<GuildLeagueSignup[]> {
 
   if (error) {
     throw new Error(
-      toFriendlyErrorMessage(error, 'Gagal memuat daftar pendaftar. Silakan coba muat ulang.'),
+      toFriendlyErrorMessage(error, 'Gagal memuat daftar anggota. Silakan coba muat ulang.'),
     );
   }
 

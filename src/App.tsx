@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Shield, UserPlus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+import { GuildInfoCard } from './components/GuildInfoCard';
 import { JobSummaryCard } from './components/JobSummaryCard';
 import { PartyTetapTab } from './components/PartyTetapTab';
 import { RegistrationForm } from './components/RegistrationForm';
@@ -141,9 +142,6 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8">
         <header className="max-w-2xl mx-auto text-center space-y-1.5">
-          <p className="text-sm font-bold tracking-wide text-[#3730A3]">
-            JAVA GLITCH · Ragnarok: The New World
-          </p>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-balance">
             Pendataan Guild League &amp; Polarity
           </h1>
@@ -151,6 +149,8 @@ export default function App() {
             Daftarkan nick in game, pilih job, dan atur susunan team dari Daftar Anggota.
           </p>
         </header>
+
+        <GuildInfoCard onNotify={showToast} />
 
         <nav aria-label="Menu utama" className="max-w-2xl mx-auto">
           <div
