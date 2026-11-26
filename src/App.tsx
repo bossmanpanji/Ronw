@@ -14,6 +14,7 @@ import {
   fetchGuildLeagueRosterTitles,
   fetchGuildLeagueSignups,
   fetchGuildLeagueTeamSlots,
+  fetchGuildLogo,
 } from './lib/supabase';
 import type {
   GuildLeagueFixedParty,
@@ -43,6 +44,14 @@ export default function App() {
   const [partiesError, setPartiesError] = useState<string | null>(null);
 
   const [rosterTitles, setRosterTitles] = useState<GuildLeagueRosterTitle[]>([]);
+  const [guildLogoUrl, setGuildLogoUrl] = useState<string | null>(() => {
+    try {
+      const saved = window.localStorage.getItem('javaglitch-guild-logo-v1');
+      return saved && saved.startsWith('data:image/') ? saved : null;
+    } catch {
+      return null;
+    }
+  });
 
   const showToast = useCallback((nextToast: Omit<ToastData, 'id'>) => {
     setToast({
@@ -119,14 +128,31 @@ export default function App() {
     }
   }, []);
 
+  const loadGuildLogo = useCallback(async () => {
+    try {
+      const remoteLogo = await fetchGuildLogo();
+      if (remoteLogo) {
+        setGuildLogoUrl(remoteLogo);
+        try {
+          window.localStorage.setItem('javaglitch-guild-logo-v1', remoteLogo);
+        } catch {
+          // Ignore local cache quota issues
+        }
+      }
+    } catch {
+      // Keep cached/default logo silently if fetch fails
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     await Promise.all([
       loadSignups(),
       loadTeamSlots(),
       loadFixedParties(),
       loadRosterTitles(),
+      loadGuildLogo(),
     ]);
-  }, [loadSignups, loadTeamSlots, loadFixedParties, loadRosterTitles]);
+  }, [loadSignups, loadTeamSlots, loadFixedParties, loadRosterTitles, loadGuildLogo]);
 
   useEffect(() => {
     void refreshAll();
@@ -150,7 +176,11 @@ export default function App() {
           </p>
         </header>
 
-        <GuildInfoCard onNotify={showToast} />
+        <GuildInfoCard
+          logoUrl={guildLogoUrl}
+          onLogoSaved={(nextLogoUrl) => setGuildLogoUrl(nextLogoUrl)}
+          onNotify={showToast}
+        />
 
         <nav aria-label="Menu utama" className="max-w-2xl mx-auto">
           <div

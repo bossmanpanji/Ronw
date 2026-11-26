@@ -17,6 +17,8 @@ const TEAM_SLOTS_TABLE = 'guild_league_team_slots';
 const FIXED_PARTIES_TABLE = 'guild_league_fixed_parties';
 const FIXED_PARTY_SLOTS_TABLE = 'guild_league_fixed_party_slots';
 const ROSTER_TITLES_TABLE = 'guild_league_roster_titles';
+const SETTINGS_TABLE = 'guild_league_settings';
+const GUILD_LOGO_SETTING_KEY = 'guild_logo';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -85,6 +87,9 @@ function toFriendlyErrorMessage(error: unknown, fallback: string): string {
       }
       if (raw.includes(ROSTER_TITLES_TABLE)) {
         return 'Tabel judul team belum dibuat di Supabase. Jalankan skrip SQL judul team di Supabase SQL Editor terlebih dahulu.';
+      }
+      if (raw.includes(SETTINGS_TABLE)) {
+        return 'Tabel logo guild belum dibuat di Supabase. Jalankan skrip SQL logo guild di Supabase SQL Editor terlebih dahulu.';
       }
       return 'Tabel guild_league_signups belum ditemukan. Jalankan skrip SQL di Supabase SQL Editor terlebih dahulu.';
     }
@@ -519,6 +524,56 @@ export async function deleteGuildLeagueRosterTitle(titleKey: string): Promise<vo
   if (error) {
     throw new Error(
       toFriendlyErrorMessage(error, 'Gagal mereset judul team. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function fetchGuildLogo(): Promise<string | null> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from(SETTINGS_TABLE)
+    .select('setting_value')
+    .eq('setting_key', GUILD_LOGO_SETTING_KEY)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return null;
+    }
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat logo guild. Silakan coba muat ulang.'),
+    );
+  }
+
+  const value = (data as { setting_value?: unknown } | null)?.setting_value;
+  if (typeof value === 'string' && value.startsWith('data:image/')) {
+    return value;
+  }
+  return null;
+}
+
+export async function saveGuildLogo(dataUrl: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { error } = await client.from(SETTINGS_TABLE).upsert(
+    {
+      setting_key: GUILD_LOGO_SETTING_KEY,
+      setting_value: dataUrl,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'setting_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menyimpan logo guild ke database. Silakan coba lagi.'),
     );
   }
 }

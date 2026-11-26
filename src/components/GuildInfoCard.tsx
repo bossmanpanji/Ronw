@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { ImagePlus } from 'lucide-react';
+import { useRef, useState, type ChangeEvent } from 'react';
+import { ImagePlus, Loader2 } from 'lucide-react';
+import { saveGuildLogo } from '../lib/supabase';
 import type { ToastData } from './Toast';
 
 const LOGO_STORAGE_KEY = 'javaglitch-guild-logo-v1';
@@ -7,19 +8,9 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const TARGET_SIZE_PX = 256;
 
 interface GuildInfoCardProps {
+  logoUrl: string | null;
+  onLogoSaved: (nextLogoUrl: string) => void;
   onNotify: (toast: Omit<ToastData, 'id'>) => void;
-}
-
-function loadStoredLogo(): string | null {
-  try {
-    const saved = window.localStorage.getItem(LOGO_STORAGE_KEY);
-    if (saved && saved.startsWith('data:image/')) {
-      return saved;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
-  return null;
 }
 
 function rasterizeImageFile(file: File): Promise<string> {
@@ -106,18 +97,14 @@ function DiscordIcon() {
   );
 }
 
-export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+export function GuildInfoCard({ logoUrl, onLogoSaved, onNotify }: GuildInfoCardProps) {
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setLogoUrl(loadStoredLogo());
-  }, []);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (!file) return;
+    if (!file || isUploading) return;
 
     if (!file.type.startsWith('image/')) {
       onNotify({
@@ -137,14 +124,20 @@ export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
       return;
     }
 
+    setIsUploading(true);
     try {
       const processedDataUrl = await rasterizeImageFile(file);
-      window.localStorage.setItem(LOGO_STORAGE_KEY, processedDataUrl);
-      setLogoUrl(processedDataUrl);
+      await saveGuildLogo(processedDataUrl);
+      try {
+        window.localStorage.setItem(LOGO_STORAGE_KEY, processedDataUrl);
+      } catch {
+        // Ignore local cache quota issues
+      }
+      onLogoSaved(processedDataUrl);
       onNotify({
         type: 'success',
         title: 'Logo guild diperbarui',
-        message: 'Logo berhasil disimpan.',
+        message: 'Logo berhasil disimpan ke database untuk semua anggota.',
       });
     } catch (error) {
       const message =
@@ -154,6 +147,8 @@ export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
         title: 'Gagal mengunggah logo',
         message,
       });
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -166,6 +161,7 @@ export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        disabled={isUploading}
         onChange={handleFileChange}
         className="sr-only"
         aria-label="Upload logo guild"
@@ -175,10 +171,11 @@ export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
         <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
           <button
             type="button"
+            disabled={isUploading}
             onClick={() => fileInputRef.current?.click()}
             aria-label={logoUrl ? 'Ganti logo guild' : 'Upload logo guild'}
             title={logoUrl ? 'Klik untuk ganti logo' : 'Klik untuk upload logo'}
-            className="relative w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-2xl border border-slate-200 bg-slate-50 hover:border-[#3730A3]/60 hover:bg-indigo-50/40 transition-colors overflow-hidden flex items-center justify-center shrink-0 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2"
+            className="relative w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-2xl border border-slate-200 bg-slate-50 hover:border-[#3730A3]/60 hover:bg-indigo-50/40 transition-colors overflow-hidden flex items-center justify-center shrink-0 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-70"
           >
             {logoUrl ? (
               <img
@@ -192,6 +189,11 @@ export function GuildInfoCard({ onNotify }: GuildInfoCardProps) {
                 <span className="text-[11px] font-semibold leading-tight text-center">
                   Logo
                 </span>
+              </div>
+            )}
+            {isUploading && (
+              <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
+                <Loader2 aria-hidden="true" className="w-5 h-5 animate-spin text-[#3730A3]" />
               </div>
             )}
           </button>
