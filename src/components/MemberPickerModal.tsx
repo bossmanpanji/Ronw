@@ -1,7 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Search, X } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
-import { DIVISIONS, type DivisionId } from '../constants/teams';
+import {
+  DIVISIONS,
+  SLOTS_PER_TEAM,
+  TEAMS_PER_DIVISION,
+  type DivisionId,
+} from '../constants/teams';
 import { clearGuildLeagueTeamSlot, upsertGuildLeagueTeamSlot } from '../lib/supabase';
 import type { GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
 
@@ -56,6 +61,14 @@ export function MemberPickerModal({
   const assignmentsBySignupId = useMemo(() => {
     const map = new Map<string, GuildLeagueTeamSlot[]>();
     for (const slot of allSlots) {
+      if (
+        slot.team_number < 1 ||
+        slot.team_number > TEAMS_PER_DIVISION ||
+        slot.slot_number < 1 ||
+        slot.slot_number > SLOTS_PER_TEAM
+      ) {
+        continue;
+      }
       const existing = map.get(slot.signup_id) ?? [];
       existing.push(slot);
       map.set(slot.signup_id, existing);

@@ -1,6 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { makeSlotKey, type DivisionId } from '../constants/teams';
-import type { FieldType, GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
+import type {
+  GuildLeagueFixedParty,
+  GuildLeagueFixedPartySlot,
+  GuildLeagueSignup,
+  GuildLeagueTeamSlot,
+} from '../types/signup';
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
 const supabaseAnonKey =
@@ -8,6 +13,8 @@ const supabaseAnonKey =
 
 const TABLE_NAME = 'guild_league_signups';
 const TEAM_SLOTS_TABLE = 'guild_league_team_slots';
+const FIXED_PARTIES_TABLE = 'guild_league_fixed_parties';
+const FIXED_PARTY_SLOTS_TABLE = 'guild_league_fixed_party_slots';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -70,6 +77,9 @@ function toFriendlyErrorMessage(error: unknown, fallback: string): string {
     ) {
       if (raw.includes(TEAM_SLOTS_TABLE)) {
         return 'Tabel guild_league_team_slots belum dibuat. Jalankan skrip SQL tabel team di Supabase SQL Editor terlebih dahulu.';
+      }
+      if (raw.includes(FIXED_PARTIES_TABLE) || raw.includes(FIXED_PARTY_SLOTS_TABLE)) {
+        return 'Tabel Party Tetap belum dibuat di Supabase. Jalankan skrip SQL Party Tetap di Supabase SQL Editor terlebih dahulu.';
       }
       return 'Tabel guild_league_signups belum ditemukan. Jalankan skrip SQL di Supabase SQL Editor terlebih dahulu.';
     }
@@ -268,6 +278,163 @@ export async function clearGuildLeagueTeamSlot(slotKey: string): Promise<void> {
   if (error) {
     throw new Error(
       toFriendlyErrorMessage(error, 'Gagal mengosongkan slot team. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function fetchGuildLeagueFixedParties(): Promise<GuildLeagueFixedParty[]> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { data, error } = await client
+    .from(FIXED_PARTIES_TABLE)
+    .select('id, name, created_at')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat daftar party tetap. Silakan coba muat ulang.'),
+    );
+  }
+
+  return (data ?? []) as GuildLeagueFixedParty[];
+}
+
+export async function createGuildLeagueFixedParty(name: string): Promise<GuildLeagueFixedParty> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const cleanName = name.trim();
+  const { data, error } = await client
+    .from(FIXED_PARTIES_TABLE)
+    .insert({ name: cleanName })
+    .select('id, name, created_at')
+    .single();
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menambahkan team baru. Silakan coba lagi.'),
+    );
+  }
+
+  return data as GuildLeagueFixedParty;
+}
+
+export async function renameGuildLeagueFixedParty(id: string, name: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const cleanName = name.trim();
+  const { data, error } = await client
+    .from(FIXED_PARTIES_TABLE)
+    .update({ name: cleanName })
+    .eq('id', id)
+    .select('id');
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal mengubah nama team. Silakan coba lagi.'),
+    );
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Team tidak ditemukan atau izin ubah ditolak. Silakan muat ulang.');
+  }
+}
+
+export async function deleteGuildLeagueFixedParty(id: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { data, error } = await client
+    .from(FIXED_PARTIES_TABLE)
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menghapus team. Silakan coba lagi.'),
+    );
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Team tidak ditemukan atau izin hapus ditolak. Silakan muat ulang.');
+  }
+}
+
+export async function fetchGuildLeagueFixedPartySlots(): Promise<GuildLeagueFixedPartySlot[]> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { data, error } = await client
+    .from(FIXED_PARTY_SLOTS_TABLE)
+    .select('slot_key, party_id, slot_number, signup_id, updated_at')
+    .order('slot_number', { ascending: true });
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(
+        error,
+        'Gagal memuat susunan anggota party tetap. Silakan coba muat ulang.',
+      ),
+    );
+  }
+
+  return (data ?? []) as GuildLeagueFixedPartySlot[];
+}
+
+export async function upsertGuildLeagueFixedPartySlot(params: {
+  partyId: string;
+  slotNumber: number;
+  signupId: string;
+}): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const slotKey = `${params.partyId}:${params.slotNumber}`;
+
+  const { error } = await client.from(FIXED_PARTY_SLOTS_TABLE).upsert(
+    {
+      slot_key: slotKey,
+      party_id: params.partyId,
+      slot_number: params.slotNumber,
+      signup_id: params.signupId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'slot_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menyimpan anggota ke party tetap. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function clearGuildLeagueFixedPartySlot(slotKey: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { error } = await client.from(FIXED_PARTY_SLOTS_TABLE).delete().eq('slot_key', slotKey);
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal mengosongkan slot party tetap. Silakan coba lagi.'),
     );
   }
 }

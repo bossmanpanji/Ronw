@@ -19,3 +19,17 @@ export interface GuildLeagueTeamSlot {
   signup_id: string;
   updated_at: string;
 }
+
+export interface GuildLeagueFixedParty {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface GuildLeagueFixedPartySlot {
+  slot_key: string;
+  party_id: string;
+  slot_number: number;
+  signup_id: string;
+  updated_at: string;
+}

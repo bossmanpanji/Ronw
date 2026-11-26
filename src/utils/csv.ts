@@ -1,5 +1,10 @@
 import { DIVISIONS, makeSlotKey, SLOTS_PER_TEAM, TEAMS_PER_DIVISION } from '../constants/teams';
-import type { GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
+import type {
+  GuildLeagueFixedParty,
+  GuildLeagueFixedPartySlot,
+  GuildLeagueSignup,
+  GuildLeagueTeamSlot,
+} from '../types/signup';
 
 function escapeCsvCell(rawValue: string | number): string {
   let str = String(rawValue);
@@ -100,4 +105,36 @@ export function downloadTeamRosterCsv(
 
   const csv = buildCsvContent(headers, rows);
   triggerCsvDownload(`java-glitch-susunan-team-${getTodayDateSlug()}.csv`, csv);
+}
+
+export function downloadFixedPartiesCsv(
+  parties: GuildLeagueFixedParty[],
+  partySlots: GuildLeagueFixedPartySlot[],
+  signups: GuildLeagueSignup[],
+): void {
+  const signupMap = new Map<string, GuildLeagueSignup>();
+  for (const member of signups) {
+    signupMap.set(member.id, member);
+  }
+
+  const slotMap = new Map<string, GuildLeagueFixedPartySlot>();
+  for (const slot of partySlots) {
+    slotMap.set(slot.slot_key, slot);
+  }
+
+  const headers = ['Nama Team', 'Slot', 'Nick In Game', 'Job'];
+  const rows: (string | number)[][] = [];
+
+  for (const party of parties) {
+    for (let slotNum = 1; slotNum <= SLOTS_PER_TEAM; slotNum += 1) {
+      const slot = slotMap.get(`${party.id}:${slotNum}`);
+      const member = slot ? signupMap.get(slot.signup_id) : undefined;
+      if (member) {
+        rows.push([party.name, slotNum, member.nickname, member.job]);
+      }
+    }
+  }
+
+  const csv = buildCsvContent(headers, rows);
+  triggerCsvDownload(`java-glitch-party-tetap-${getTodayDateSlug()}.csv`, csv);
 }

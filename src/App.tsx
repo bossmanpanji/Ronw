@@ -1,15 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
-import { UserPlus, Users } from 'lucide-react';
+import { Shield, UserPlus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { JobSummaryCard } from './components/JobSummaryCard';
+import { PartyTetapTab } from './components/PartyTetapTab';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SignupList } from './components/SignupList';
 import { TeamRosterTab } from './components/TeamRosterTab';
 import { Toast, type ToastData } from './components/Toast';
-import { fetchGuildLeagueSignups, fetchGuildLeagueTeamSlots } from './lib/supabase';
-import type { GuildLeagueSignup, GuildLeagueTeamSlot } from './types/signup';
+import {
+  fetchGuildLeagueFixedParties,
+  fetchGuildLeagueFixedPartySlots,
+  fetchGuildLeagueSignups,
+  fetchGuildLeagueTeamSlots,
+} from './lib/supabase';
+import type {
+  GuildLeagueFixedParty,
+  GuildLeagueFixedPartySlot,
+  GuildLeagueSignup,
+  GuildLeagueTeamSlot,
+} from './types/signup';
 
-type ActiveTab = 'signup' | 'roster';
+type ActiveTab = 'signup' | 'roster' | 'party';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('signup');
@@ -22,6 +33,11 @@ export default function App() {
   const [teamSlots, setTeamSlots] = useState<GuildLeagueTeamSlot[]>([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(true);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+
+  const [fixedParties, setFixedParties] = useState<GuildLeagueFixedParty[]>([]);
+  const [fixedPartySlots, setFixedPartySlots] = useState<GuildLeagueFixedPartySlot[]>([]);
+  const [isPartiesLoading, setIsPartiesLoading] = useState(true);
+  const [partiesError, setPartiesError] = useState<string | null>(null);
 
   const showToast = useCallback((nextToast: Omit<ToastData, 'id'>) => {
     setToast({
@@ -68,17 +84,39 @@ export default function App() {
     }
   }, []);
 
+  const loadFixedParties = useCallback(async () => {
+    setIsPartiesLoading(true);
+    setPartiesError(null);
+    try {
+      const [partiesData, slotsData] = await Promise.all([
+        fetchGuildLeagueFixedParties(),
+        fetchGuildLeagueFixedPartySlots(),
+      ]);
+      setFixedParties(partiesData);
+      setFixedPartySlots(slotsData);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Gagal memuat daftar party tetap. Silakan coba muat ulang.';
+      setPartiesError(message);
+    } finally {
+      setIsPartiesLoading(false);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadSignups(), loadTeamSlots()]);
-  }, [loadSignups, loadTeamSlots]);
+    await Promise.all([loadSignups(), loadTeamSlots(), loadFixedParties()]);
+  }, [loadSignups, loadTeamSlots, loadFixedParties]);
 
   useEffect(() => {
     void refreshAll();
   }, [refreshAll]);
 
   const tabs: { id: ActiveTab; label: string; count?: number; icon: typeof UserPlus }[] = [
-    { id: 'signup', label: 'Pendaftaran', count: signups.length, icon: UserPlus },
+    { id: 'signup', label: 'List Anggota', count: signups.length, icon: UserPlus },
     { id: 'roster', label: 'Susunan Team', icon: Users },
+    { id: 'party', label: 'Party Tetap', count: fixedParties.length, icon: Shield },
   ];
 
   return (
@@ -96,10 +134,10 @@ export default function App() {
           </p>
         </header>
 
-        <nav aria-label="Menu utama" className="max-w-lg mx-auto">
+        <nav aria-label="Menu utama" className="max-w-2xl mx-auto">
           <div
             role="tablist"
-            className="grid grid-cols-2 gap-2 p-2 bg-white rounded-2xl border-2 border-slate-200 shadow-sm"
+            className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 sm:p-2 bg-white rounded-2xl border-2 border-slate-200 shadow-sm"
           >
             {tabs.map((tab) => {
               const isSelected = activeTab === tab.id;
@@ -114,7 +152,7 @@ export default function App() {
                   whileHover={{ scale: isSelected ? 1 : 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative min-h-[52px] px-4 py-2.5 rounded-xl text-sm sm:text-base font-bold whitespace-nowrap transition-colors duration-150 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
+                  className={`relative min-h-[48px] sm:min-h-[52px] px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-base font-bold whitespace-nowrap transition-colors duration-150 flex items-center justify-center gap-1 sm:gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
                     isSelected
                       ? 'text-white'
                       : 'text-slate-700 hover:text-[#3730A3] hover:bg-slate-50'
@@ -127,12 +165,12 @@ export default function App() {
                       className="absolute inset-0 rounded-xl bg-[#3730A3] shadow-md shadow-indigo-950/20"
                     />
                   )}
-                  <span className="relative z-10 flex items-center justify-center gap-2">
-                    <Icon aria-hidden="true" className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                    <span>{tab.label}</span>
+                  <span className="relative z-10 flex items-center justify-center gap-1 sm:gap-2 min-w-0">
+                    <Icon aria-hidden="true" className="hidden sm:block w-5 h-5 shrink-0" />
+                    <span className="truncate">{tab.label}</span>
                     {tab.count !== undefined && (
                       <span
-                        className={`text-xs sm:text-sm font-bold tabular-nums ${
+                        className={`text-[11px] sm:text-sm font-bold tabular-nums shrink-0 ${
                           isSelected ? 'text-indigo-100' : 'text-slate-500'
                         }`}
                       >
@@ -165,13 +203,23 @@ export default function App() {
                 onRefresh={refreshAll}
               />
             </div>
-          ) : (
+          ) : activeTab === 'roster' ? (
             <TeamRosterTab
               signups={signups}
               teamSlots={teamSlots}
               isLoading={isSignupsLoading || isSlotsLoading}
               error={slotsError ?? signupsError}
               onRefresh={refreshAll}
+            />
+          ) : (
+            <PartyTetapTab
+              signups={signups}
+              parties={fixedParties}
+              partySlots={fixedPartySlots}
+              isLoading={isSignupsLoading || isPartiesLoading}
+              error={partiesError ?? signupsError}
+              onRefresh={refreshAll}
+              onNotify={showToast}
             />
           )}
         </motion.div>

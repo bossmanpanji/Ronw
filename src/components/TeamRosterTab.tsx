@@ -62,7 +62,13 @@ export function TeamRosterTab({
       counts.set(d.id, 0);
     }
     for (const slot of teamSlots) {
-      if (signupMap.has(slot.signup_id)) {
+      if (
+        slot.team_number >= 1 &&
+        slot.team_number <= TEAMS_PER_DIVISION &&
+        slot.slot_number >= 1 &&
+        slot.slot_number <= SLOTS_PER_TEAM &&
+        signupMap.has(slot.signup_id)
+      ) {
         counts.set(slot.division, (counts.get(slot.division) ?? 0) + 1);
       }
     }
@@ -117,7 +123,8 @@ export function TeamRosterTab({
             Susunan Team
           </h2>
           <p className="text-sm text-slate-600 mt-0.5">
-            Pilih anggota dari Daftar Anggota untuk mengisi tiap team (10 team × 5 orang).
+            Pilih anggota dari Daftar Anggota untuk mengisi tiap team ({TEAMS_PER_DIVISION} team ×{' '}
+            {SLOTS_PER_TEAM} orang).
           </p>
         </div>
 

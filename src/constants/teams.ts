@@ -19,7 +19,7 @@ export interface DivisionConfig {
   softBorder: string;
 }
 
-export const TEAMS_PER_DIVISION = 10;
+export const TEAMS_PER_DIVISION = 8;
 export const SLOTS_PER_TEAM = 5;
 
 const MAIN_FIELD_STYLE = {
