@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { updateGuildLeagueSignup } from '../lib/supabase';
-import type { FieldType, GuildLeagueSignup } from '../types/signup';
+import type { GuildLeagueSignup } from '../types/signup';
 import { JobDropdown } from './JobDropdown';
 
 interface EditMemberModalProps {
@@ -27,7 +27,6 @@ function validateNickname(raw: string): string | null {
 export function EditMemberModal({ member, onClose, onSaved }: EditMemberModalProps) {
   const [nickname, setNickname] = useState(member.nickname);
   const [job, setJob] = useState(member.job);
-  const [field, setField] = useState<FieldType>(member.field);
 
   const [nickTouched, setNickTouched] = useState(false);
   const [jobTouched, setJobTouched] = useState(false);
@@ -74,7 +73,6 @@ export function EditMemberModal({ member, onClose, onSaved }: EditMemberModalPro
         id: member.id,
         nickname,
         job,
-        field,
       });
       await onSaved();
     } catch (error) {
@@ -164,48 +162,6 @@ export function EditMemberModal({ member, onClose, onSaved }: EditMemberModalPro
             }}
             onBlur={() => setJobTouched(true)}
           />
-
-          <div>
-            <span
-              id="edit-field-group-label"
-              className="block text-sm font-semibold text-slate-800 mb-1.5"
-            >
-              Field
-            </span>
-            <div
-              role="group"
-              aria-labelledby="edit-field-group-label"
-              className="grid grid-cols-2 gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200"
-            >
-              {(
-                [
-                  { id: 'main', label: 'Main Field' },
-                  { id: 'sub', label: 'Sub Field' },
-                ] as const
-              ).map((option) => {
-                const isSelected = field === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={isSubmitting}
-                    aria-pressed={isSelected}
-                    onClick={() => {
-                      setField(option.id);
-                      if (errorMessage) setErrorMessage(null);
-                    }}
-                    className={`min-h-[48px] px-4 py-2.5 rounded-lg text-sm sm:text-base font-semibold whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${
-                      isSelected
-                        ? 'bg-[#3730A3] text-white shadow-xs'
-                        : 'bg-transparent text-slate-700 hover:text-slate-900 hover:bg-white/60'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {errorMessage && (
             <div

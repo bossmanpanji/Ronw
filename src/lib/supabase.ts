@@ -105,7 +105,6 @@ export interface UpsertSignupResult {
 export async function upsertGuildLeagueSignup(params: {
   nickname: string;
   job: string;
-  field: FieldType;
 }): Promise<UpsertSignupResult> {
   const client = getSupabaseClient();
   if (!client) {
@@ -123,7 +122,7 @@ export async function upsertGuildLeagueSignup(params: {
 
   if (lookupError) {
     throw new Error(
-      toFriendlyErrorMessage(lookupError, 'Gagal memeriksa data pendaftar. Silakan coba lagi.'),
+      toFriendlyErrorMessage(lookupError, 'Gagal memeriksa data anggota. Silakan coba lagi.'),
     );
   }
 
@@ -132,7 +131,7 @@ export async function upsertGuildLeagueSignup(params: {
       nickname: cleanNickname,
       nickname_key: nicknameKey,
       job: params.job,
-      field: params.field,
+      field: 'main',
     },
     { onConflict: 'nickname_key' },
   );
@@ -152,7 +151,6 @@ export async function updateGuildLeagueSignup(params: {
   id: string;
   nickname: string;
   job: string;
-  field: FieldType;
 }): Promise<void> {
   const client = getSupabaseClient();
   if (!client) {
@@ -168,7 +166,6 @@ export async function updateGuildLeagueSignup(params: {
       nickname: cleanNickname,
       nickname_key: nicknameKey,
       job: params.job,
-      field: params.field,
     })
     .eq('id', params.id)
     .select('id');

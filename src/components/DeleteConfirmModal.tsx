@@ -73,8 +73,7 @@ export function DeleteConfirmModal({ member, onClose, onDeleted }: DeleteConfirm
 
         <p className="text-sm sm:text-base text-slate-600">
           Data <span className="font-semibold text-slate-900 break-words">{member.nickname}</span>{' '}
-          ({member.job}) akan dihapus dari daftar{' '}
-          {member.field === 'main' ? 'Main Field' : 'Sub Field'}.
+          ({member.job}) akan dihapus dari Daftar Anggota.
         </p>
 
         {errorMessage && (

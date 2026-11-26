@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { upsertGuildLeagueSignup } from '../lib/supabase';
-import type { FieldType } from '../types/signup';
 import { JobDropdown } from './JobDropdown';
 
 interface RegistrationFormProps {
@@ -25,11 +24,9 @@ function validateNickname(raw: string): string | null {
 export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
   const [nickname, setNickname] = useState('');
   const [job, setJob] = useState('');
-  const [field, setField] = useState<FieldType | null>(null);
 
   const [nickTouched, setNickTouched] = useState(false);
   const [jobTouched, setJobTouched] = useState(false);
-  const [fieldTouched, setFieldTouched] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{
@@ -39,17 +36,15 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
 
   const nickError = validateNickname(nickname);
   const jobError = job ? null : 'Pilih salah satu job.';
-  const fieldError = field ? null : 'Pilih Main Field atau Sub Field.';
 
-  const isFormValid = !nickError && !jobError && !fieldError;
+  const isFormValid = !nickError && !jobError;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setNickTouched(true);
     setJobTouched(true);
-    setFieldTouched(true);
 
-    if (!isFormValid || !field || isSubmitting) {
+    if (!isFormValid || isSubmitting) {
       return;
     }
 
@@ -60,15 +55,12 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
       const result = await upsertGuildLeagueSignup({
         nickname,
         job,
-        field,
       });
 
       setNickname('');
       setJob('');
-      setField(null);
       setNickTouched(false);
       setJobTouched(false);
-      setFieldTouched(false);
 
       setFeedback({
         type: 'success',
@@ -99,8 +91,7 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
             Form Pendaftaran
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Masukkan nick in game, pilih job karakter, lalu pilih Main Field atau Sub Field dan
-            tekan Daftar.
+            Masukkan nick in game, pilih job karakter, lalu tekan Daftar.
           </p>
         </div>
 
@@ -152,54 +143,6 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
             }}
             onBlur={() => setJobTouched(true)}
           />
-
-          <div>
-            <span
-              id="field-group-label"
-              className="block text-sm font-semibold text-slate-800 mb-1.5"
-            >
-              Field
-            </span>
-            <div
-              role="group"
-              aria-labelledby="field-group-label"
-              className="grid grid-cols-2 gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200"
-            >
-              {(
-                [
-                  { id: 'main', label: 'Main Field' },
-                  { id: 'sub', label: 'Sub Field' },
-                ] as const
-              ).map((option) => {
-                const isSelected = field === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={isSubmitting}
-                    aria-pressed={isSelected}
-                    onClick={() => {
-                      setField(option.id);
-                      setFieldTouched(true);
-                      if (feedback) setFeedback(null);
-                    }}
-                    className={`min-h-[48px] px-4 py-2.5 rounded-lg text-sm sm:text-base font-semibold whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed ${
-                      isSelected
-                        ? 'bg-[#3730A3] text-white shadow-xs'
-                        : 'bg-transparent text-slate-700 hover:text-slate-900 hover:bg-white/60'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            {fieldTouched && fieldError && (
-              <p className="mt-1.5 text-xs font-medium text-red-600" role="alert">
-                {fieldError}
-              </p>
-            )}
-          </div>
 
           <button
             type="submit"

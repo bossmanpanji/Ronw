@@ -108,7 +108,7 @@ export function TeamRosterTab({
             Susunan Team
           </h2>
           <p className="text-sm text-slate-600 mt-0.5">
-            Pilih anggota dari Daftar Pendaftar untuk mengisi tiap team (10 team × 5 orang).
+            Pilih anggota dari Daftar Anggota untuk mengisi tiap team (10 team × 5 orang).
           </p>
         </div>
 
@@ -132,7 +132,7 @@ export function TeamRosterTab({
       <div
         role="tablist"
         aria-label="Pilih divisi team"
-        className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2"
       >
         {DIVISIONS.map((division) => {
           const isSelected = division.id === selectedDivision;
@@ -148,17 +148,38 @@ export function TeamRosterTab({
                 setSelectedDivision(division.id);
                 setActionError(null);
               }}
-              className={`min-h-[48px] px-3.5 py-2.5 rounded-xl border text-left transition-all duration-150 flex items-center justify-between gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
+              style={
                 isSelected
-                  ? 'bg-[#3730A3] border-[#3730A3] text-white shadow-xs'
-                  : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                  ? {
+                      backgroundColor: division.color,
+                      borderColor: division.color,
+                      color: division.textColor,
+                    }
+                  : {
+                      backgroundColor: division.softBg,
+                      borderColor: division.softBorder,
+                    }
+              }
+              className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-left transition-all duration-150 flex items-center justify-between gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
+                isSelected ? 'shadow-xs' : 'text-slate-900 hover:brightness-[0.98]'
               }`}
             >
-              <span className="text-xs sm:text-sm font-semibold truncate">{division.label}</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span
+                  aria-hidden="true"
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 border ${
+                    isSelected
+                      ? division.textColor === '#FFFFFF'
+                        ? 'border-white/75'
+                        : 'border-slate-900/35'
+                      : 'border-black/10'
+                  }`}
+                  style={{ backgroundColor: division.color }}
+                />
+                <span className="text-xs sm:text-sm font-semibold truncate">{division.label}</span>
+              </span>
               <span
-                className={`text-xs font-semibold tabular-nums shrink-0 ${
-                  isSelected ? 'text-indigo-100' : 'text-slate-500'
-                }`}
+                className="text-xs font-semibold tabular-nums shrink-0 opacity-85"
               >
                 {filled}/{maxSlotsPerDivision}
               </span>
@@ -177,10 +198,26 @@ export function TeamRosterTab({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
-        <span className="font-semibold text-slate-900">{currentDivisionConfig.label}</span>
-        <span className="tabular-nums">
-          {currentDivisionCount} / {maxSlotsPerDivision} slot terisi · {signups.length} pendaftar
+      <div
+        style={{
+          backgroundColor: currentDivisionConfig.softBg,
+          borderColor: currentDivisionConfig.softBorder,
+        }}
+        className="rounded-2xl border px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 text-sm"
+      >
+        <div className="flex items-center gap-2.5">
+          <span
+            style={{
+              backgroundColor: currentDivisionConfig.color,
+              color: currentDivisionConfig.textColor,
+            }}
+            className="inline-flex items-center px-3 py-1 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap"
+          >
+            {currentDivisionConfig.label}
+          </span>
+        </div>
+        <span className="text-slate-700 font-medium tabular-nums">
+          {currentDivisionCount} / {maxSlotsPerDivision} slot terisi · {signups.length} anggota
           tersedia
         </span>
       </div>
@@ -201,11 +238,25 @@ export function TeamRosterTab({
             return (
               <div
                 key={teamNumber}
-                className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden"
+                style={{ borderColor: currentDivisionConfig.softBorder }}
+                className="bg-white rounded-2xl border shadow-xs overflow-hidden"
               >
-                <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 bg-slate-50/60 flex items-center justify-between gap-2">
-                  <h3 className="text-base font-bold text-slate-900">Team {teamNumber}</h3>
-                  <span className="text-xs sm:text-sm font-semibold text-slate-500 tabular-nums">
+                <div
+                  style={{
+                    backgroundColor: currentDivisionConfig.softBg,
+                    borderColor: currentDivisionConfig.softBorder,
+                  }}
+                  className="px-4 sm:px-5 py-3.5 border-b flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: currentDivisionConfig.color }}
+                    />
+                    <h3 className="text-base font-bold text-slate-900">Team {teamNumber}</h3>
+                  </div>
+                  <span className="text-xs sm:text-sm font-semibold text-slate-700 tabular-nums">
                     {teamFilledCount}/{SLOTS_PER_TEAM} orang
                   </span>
                 </div>

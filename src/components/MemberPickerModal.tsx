@@ -3,7 +3,7 @@ import { AlertCircle, Loader2, Search, X } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
 import { DIVISIONS, type DivisionId } from '../constants/teams';
 import { clearGuildLeagueTeamSlot, upsertGuildLeagueTeamSlot } from '../lib/supabase';
-import type { FieldType, GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
+import type { GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
 
 interface MemberPickerModalProps {
   division: DivisionId;
@@ -29,7 +29,6 @@ export function MemberPickerModal({
   onSaved,
 }: MemberPickerModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [fieldFilter, setFieldFilter] = useState<'all' | FieldType>('all');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -46,10 +45,10 @@ export function MemberPickerModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSaving, onClose]);
 
-  const divisionLabelMap = useMemo(() => {
-    const map = new Map<DivisionId, string>();
+  const divisionMap = useMemo(() => {
+    const map = new Map<DivisionId, (typeof DIVISIONS)[number]>();
     for (const d of DIVISIONS) {
-      map.set(d.id, d.label);
+      map.set(d.id, d);
     }
     return map;
   }, []);
@@ -66,17 +65,13 @@ export function MemberPickerModal({
 
   const filteredSignups = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return signups.filter((member) => {
-      if (fieldFilter !== 'all' && member.field !== fieldFilter) {
-        return false;
-      }
-      if (!query) return true;
-      return (
+    if (!query) return signups;
+    return signups.filter(
+      (member) =>
         member.nickname.toLowerCase().includes(query) ||
-        member.job.toLowerCase().includes(query)
-      );
-    });
-  }, [signups, fieldFilter, searchQuery]);
+        member.job.toLowerCase().includes(query),
+    );
+  }, [signups, searchQuery]);
 
   async function handleSelectMember(signupId: string) {
     if (isSaving) return;
@@ -165,37 +160,10 @@ export function MemberPickerModal({
               value={searchQuery}
               disabled={isSaving}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nick atau job pendaftar..."
-              aria-label="Cari nick atau job pendaftar"
+              placeholder="Cari nick atau job anggota..."
+              aria-label="Cari nick atau job anggota"
               className="w-full min-h-[44px] pl-10 pr-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
             />
-          </div>
-
-          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
-            {(
-              [
-                { id: 'all', label: 'Semua' },
-                { id: 'main', label: 'Main Field' },
-                { id: 'sub', label: 'Sub Field' },
-              ] as const
-            ).map((filterOption) => {
-              const active = fieldFilter === filterOption.id;
-              return (
-                <button
-                  key={filterOption.id}
-                  type="button"
-                  disabled={isSaving}
-                  onClick={() => setFieldFilter(filterOption.id)}
-                  className={`min-h-[40px] px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] ${
-                    active
-                      ? 'bg-[#3730A3] text-white shadow-xs'
-                      : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                >
-                  {filterOption.label}
-                </button>
-              );
-            })}
           </div>
         </div>
 
@@ -212,12 +180,12 @@ export function MemberPickerModal({
         <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
           {signups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm text-slate-500">
-              Belum ada anggota di Daftar Pendaftar. Silakan daftar terlebih dahulu di tab
+              Belum ada anggota di Daftar Anggota. Silakan daftar terlebih dahulu di tab
               Pendaftaran.
             </div>
           ) : filteredSignups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm text-slate-500">
-              Tidak ada pendaftar yang cocok dengan pencarian.
+              Tidak ada anggota yang cocok dengan pencarian.
             </div>
           ) : (
             filteredSignups.map((member) => {
@@ -255,31 +223,38 @@ export function MemberPickerModal({
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span>{member.field === 'main' ? 'Main Field' : 'Sub Field'}</span>
-                      {sameDivisionSlot && (
-                        <>
-                          <span aria-hidden="true">·</span>
+                    {(sameDivisionSlot || otherDivisionSlots.length > 0) && (
+                      <div className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        {sameDivisionSlot && (
                           <span className="text-amber-700 font-medium">
                             Sudah di Team {sameDivisionSlot.team_number}
                           </span>
-                        </>
-                      )}
-                      {!sameDivisionSlot && otherDivisionSlots.length > 0 && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span>
-                            Terisi di:{' '}
-                            {otherDivisionSlots
-                              .map(
-                                (s) =>
-                                  `${divisionLabelMap.get(s.division) ?? s.division} (T${s.team_number})`,
-                              )
-                              .join(', ')}
+                        )}
+                        {!sameDivisionSlot && otherDivisionSlots.length > 0 && (
+                          <span className="inline-flex flex-wrap items-center gap-1.5">
+                            <span>Terisi di:</span>
+                            {otherDivisionSlots.map((s) => {
+                              const divInfo = divisionMap.get(s.division);
+                              return (
+                                <span
+                                  key={s.slot_key}
+                                  className="inline-flex items-center gap-1 font-medium text-slate-700"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className="w-2 h-2 rounded-full shrink-0"
+                                    style={{ backgroundColor: divInfo?.color ?? '#64748B' }}
+                                  />
+                                  <span>
+                                    {divInfo?.label ?? s.division} (T{s.team_number})
+                                  </span>
+                                </span>
+                              );
+                            })}
                           </span>
-                        </>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <span
@@ -309,7 +284,7 @@ export function MemberPickerModal({
             </button>
           ) : (
             <span className="text-xs text-slate-500">
-              {isSaving ? 'Menyimpan...' : 'Sumber data: Daftar Pendaftar'}
+              {isSaving ? 'Menyimpan...' : 'Sumber data: Daftar Anggota'}
             </span>
           )}
 
