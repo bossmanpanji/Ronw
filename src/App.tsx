@@ -5,6 +5,7 @@ import { JobSummaryCard } from './components/JobSummaryCard';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SignupList } from './components/SignupList';
 import { TeamRosterTab } from './components/TeamRosterTab';
+import { Toast, type ToastData } from './components/Toast';
 import { fetchGuildLeagueSignups, fetchGuildLeagueTeamSlots } from './lib/supabase';
 import type { GuildLeagueSignup, GuildLeagueTeamSlot } from './types/signup';
 
@@ -12,6 +13,7 @@ type ActiveTab = 'signup' | 'roster';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('signup');
+  const [toast, setToast] = useState<ToastData | null>(null);
 
   const [signups, setSignups] = useState<GuildLeagueSignup[]>([]);
   const [isSignupsLoading, setIsSignupsLoading] = useState(true);
@@ -20,6 +22,17 @@ export default function App() {
   const [teamSlots, setTeamSlots] = useState<GuildLeagueTeamSlot[]>([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(true);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+
+  const showToast = useCallback((nextToast: Omit<ToastData, 'id'>) => {
+    setToast({
+      id: Date.now(),
+      ...nextToast,
+    });
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   const loadSignups = useCallback(async () => {
     setIsSignupsLoading(true);
@@ -141,7 +154,7 @@ export default function App() {
         >
           {activeTab === 'signup' ? (
             <div className="max-w-2xl mx-auto space-y-8 sm:space-y-10">
-              <RegistrationForm onSuccess={refreshAll} />
+              <RegistrationForm onSuccess={refreshAll} onNotify={showToast} />
 
               <JobSummaryCard signups={signups} isLoading={isSignupsLoading} />
 
@@ -163,6 +176,8 @@ export default function App() {
           )}
         </motion.div>
       </main>
+
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   );
 }

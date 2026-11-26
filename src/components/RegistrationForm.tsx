@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { upsertGuildLeagueSignup } from '../lib/supabase';
 import { JobDropdown } from './JobDropdown';
+import type { ToastData } from './Toast';
 
 interface RegistrationFormProps {
   onSuccess: () => Promise<void> | void;
+  onNotify: (toast: Omit<ToastData, 'id'>) => void;
 }
 
 function validateNickname(raw: string): string | null {
@@ -21,7 +23,7 @@ function validateNickname(raw: string): string | null {
   return null;
 }
 
-export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
+export function RegistrationForm({ onSuccess, onNotify }: RegistrationFormProps) {
   const [nickname, setNickname] = useState('');
   const [job, setJob] = useState('');
 
@@ -44,17 +46,31 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
     setNickTouched(true);
     setJobTouched(true);
 
-    if (!isFormValid || isSubmitting) {
+    if (!isFormValid) {
+      const errorMsg = nickError ?? jobError ?? 'Lengkapi data pendaftaran terlebih dahulu.';
+      setFeedback({ type: 'error', message: errorMsg });
+      onNotify({
+        type: 'error',
+        title: 'Data belum lengkap',
+        message: errorMsg,
+      });
+      return;
+    }
+
+    if (isSubmitting) {
       return;
     }
 
     setIsSubmitting(true);
     setFeedback(null);
 
+    const submittedNick = nickname.trim();
+    const submittedJob = job;
+
     try {
       const result = await upsertGuildLeagueSignup({
-        nickname,
-        job,
+        nickname: submittedNick,
+        job: submittedJob,
       });
 
       setNickname('');
@@ -62,10 +78,18 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
       setNickTouched(false);
       setJobTouched(false);
 
+      const successTitle =
+        result.action === 'updated' ? 'Data kamu diperbarui' : 'Berhasil terdaftar';
+
       setFeedback({
         type: 'success',
-        message:
-          result.action === 'updated' ? 'Data kamu diperbarui' : 'Berhasil terdaftar',
+        message: successTitle,
+      });
+
+      onNotify({
+        type: 'success',
+        title: successTitle,
+        message: `${submittedNick} (${submittedJob})`,
       });
 
       await onSuccess();
@@ -76,6 +100,11 @@ export function RegistrationForm({ onSuccess }: RegistrationFormProps) {
           : 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.';
       setFeedback({
         type: 'error',
+        message,
+      });
+      onNotify({
+        type: 'error',
+        title: 'Pendaftaran gagal',
         message,
       });
     } finally {

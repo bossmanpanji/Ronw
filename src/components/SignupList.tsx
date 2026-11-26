@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -6,7 +6,9 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Search,
   Trash2,
+  X,
 } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
 import type { GuildLeagueSignup } from '../types/signup';
@@ -22,9 +24,23 @@ interface SignupListProps {
 }
 
 export function SignupList({ signups, isLoading, error, onRefresh }: SignupListProps) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingMember, setEditingMember] = useState<GuildLeagueSignup | null>(null);
   const [deletingMember, setDeletingMember] = useState<GuildLeagueSignup | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+
+  const filteredEntries = useMemo(() => {
+    const indexed = signups.map((member, idx) => ({
+      member,
+      orderNumber: idx + 1,
+    }));
+    if (!trimmedQuery) return indexed;
+    return indexed.filter(({ member }) =>
+      member.nickname.toLowerCase().includes(trimmedQuery),
+    );
+  }, [signups, trimmedQuery]);
 
   return (
     <section aria-labelledby="list-heading" className="space-y-4">
@@ -62,6 +78,43 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
         </div>
       </div>
 
+      {signups.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            />
+            <input
+              id="member-search-input"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari nick in-game anggota..."
+              aria-label="Cari nick in-game anggota"
+              className={`w-full min-h-[44px] pl-10 py-2.5 rounded-xl border border-slate-300 bg-white text-sm sm:text-base text-slate-900 placeholder:text-slate-400 shadow-xs transition-colors hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
+                searchQuery ? 'pr-11' : 'pr-3.5'
+              }`}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Hapus pencarian"
+                className="min-h-[44px] min-w-[44px] absolute right-0 top-1/2 -translate-y-1/2 rounded-xl text-slate-400 hover:text-slate-700 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+              >
+                <X aria-hidden="true" className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {trimmedQuery && (
+            <p className="text-xs text-slate-500 tabular-nums px-1">
+              Menampilkan {filteredEntries.length} dari {signups.length} anggota
+            </p>
+          )}
+        </div>
+      )}
+
       {actionNotice && (
         <div
           role="status"
@@ -92,9 +145,20 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
           <div className="px-5 py-10 text-center text-sm text-slate-500">
             Belum ada yang mendaftar.
           </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="px-5 py-10 text-center text-sm text-slate-500 space-y-2">
+            <p>Tidak ada anggota dengan nama &ldquo;{searchQuery.trim()}&rdquo;.</p>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold text-[#3730A3] hover:bg-indigo-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+            >
+              Reset pencarian
+            </button>
+          </div>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {signups.map((member, index) => {
+            {filteredEntries.map(({ member, orderNumber }) => {
               const jobMeta = getJobByName(member.job);
               return (
                 <li
@@ -103,7 +167,7 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
                 >
                   <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     <span className="text-xs font-medium text-slate-400 tabular-nums w-6 shrink-0 pt-1 sm:pt-0">
-                      {index + 1}.
+                      {orderNumber}.
                     </span>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 min-w-0 flex-1">
                       <span className="text-sm sm:text-base font-medium text-slate-900 break-words min-w-0">
