@@ -1,11 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { FieldType, GuildLeagueSignup } from '../types/signup';
+import { makeSlotKey, type DivisionId } from '../constants/teams';
+import type { FieldType, GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
 const supabaseAnonKey =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? '';
 
 const TABLE_NAME = 'guild_league_signups';
+const TEAM_SLOTS_TABLE = 'guild_league_team_slots';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -60,7 +62,15 @@ function toFriendlyErrorMessage(error: unknown, fallback: string): string {
     ) {
       return 'Akses database ditolak. Pastikan policy RLS untuk role anon sudah aktif di Supabase.';
     }
-    if (raw.includes('relation') && raw.includes('does not exist')) {
+    if (
+      code === '42P01' ||
+      code === 'PGRST205' ||
+      raw.includes('schema cache') ||
+      (raw.includes('relation') && raw.includes('does not exist'))
+    ) {
+      if (raw.includes(TEAM_SLOTS_TABLE)) {
+        return 'Tabel guild_league_team_slots belum dibuat. Jalankan skrip SQL tabel team di Supabase SQL Editor terlebih dahulu.';
+      }
       return 'Tabel guild_league_signups belum ditemukan. Jalankan skrip SQL di Supabase SQL Editor terlebih dahulu.';
     }
   }
@@ -193,6 +203,74 @@ export async function deleteGuildLeagueSignup(id: string): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error(
       'Gagal menghapus data. Pastikan policy DELETE untuk role anon sudah aktif di Supabase atau muat ulang daftar.',
+    );
+  }
+}
+
+export async function fetchGuildLeagueTeamSlots(): Promise<GuildLeagueTeamSlot[]> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { data, error } = await client
+    .from(TEAM_SLOTS_TABLE)
+    .select('slot_key, division, team_number, slot_number, signup_id, updated_at')
+    .order('team_number', { ascending: true })
+    .order('slot_number', { ascending: true });
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat susunan team. Silakan coba muat ulang.'),
+    );
+  }
+
+  return (data ?? []) as GuildLeagueTeamSlot[];
+}
+
+export async function upsertGuildLeagueTeamSlot(params: {
+  division: DivisionId;
+  teamNumber: number;
+  slotNumber: number;
+  signupId: string;
+}): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const slotKey = makeSlotKey(params.division, params.teamNumber, params.slotNumber);
+
+  const { error } = await client.from(TEAM_SLOTS_TABLE).upsert(
+    {
+      slot_key: slotKey,
+      division: params.division,
+      team_number: params.teamNumber,
+      slot_number: params.slotNumber,
+      signup_id: params.signupId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'slot_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menyimpan anggota ke slot team. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function clearGuildLeagueTeamSlot(slotKey: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const { error } = await client.from(TEAM_SLOTS_TABLE).delete().eq('slot_key', slotKey);
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal mengosongkan slot team. Silakan coba lagi.'),
     );
   }
 }
