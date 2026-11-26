@@ -1,7 +1,16 @@
 import { useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
 import type { GuildLeagueSignup } from '../types/signup';
+import { downloadSignupsCsv } from '../utils/csv';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { EditMemberModal } from './EditMemberModal';
 
@@ -19,26 +28,38 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
 
   return (
     <section aria-labelledby="list-heading" className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <h2 id="list-heading" className="text-lg sm:text-xl font-bold text-slate-900 tabular-nums">
           Daftar Anggota ({signups.length})
         </h2>
 
-        <button
-          type="button"
-          onClick={() => {
-            setActionNotice(null);
-            void onRefresh();
-          }}
-          disabled={isLoading}
-          className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
-          />
-          <span>Muat ulang</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => downloadSignupsCsv(signups)}
+            disabled={isLoading || signups.length === 0}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download aria-hidden="true" className="w-4 h-4" />
+            <span>Unduh CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActionNotice(null);
+              void onRefresh();
+            }}
+            disabled={isLoading}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+            />
+            <span>Muat ulang</span>
+          </button>
+        </div>
       </div>
 
       {actionNotice && (

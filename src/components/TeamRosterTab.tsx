@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertCircle, Loader2, Plus, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, Download, Loader2, Plus, RefreshCw, X } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
 import {
   DIVISIONS,
@@ -10,6 +10,7 @@ import {
 } from '../constants/teams';
 import { clearGuildLeagueTeamSlot } from '../lib/supabase';
 import type { GuildLeagueSignup, GuildLeagueTeamSlot } from '../types/signup';
+import { downloadTeamRosterCsv } from '../utils/csv';
 import { MemberPickerModal } from './MemberPickerModal';
 
 interface TeamRosterTabProps {
@@ -68,6 +69,14 @@ export function TeamRosterTab({
     return counts;
   }, [teamSlots, signupMap]);
 
+  const totalAssignedCount = useMemo(() => {
+    let total = 0;
+    for (const count of divisionCounts.values()) {
+      total += count;
+    }
+    return total;
+  }, [divisionCounts]);
+
   const currentDivisionConfig =
     DIVISIONS.find((d) => d.id === selectedDivision) ?? DIVISIONS[0];
   const currentDivisionCount = divisionCounts.get(selectedDivision) ?? 0;
@@ -102,7 +111,7 @@ export function TeamRosterTab({
 
   return (
     <section aria-labelledby="roster-heading" className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="roster-heading" className="text-lg sm:text-xl font-bold text-slate-900">
             Susunan Team
@@ -112,21 +121,33 @@ export function TeamRosterTab({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setActionError(null);
-            void onRefresh();
-          }}
-          disabled={isLoading}
-          className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
-          />
-          <span>Muat ulang</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => downloadTeamRosterCsv(signups, teamSlots)}
+            disabled={isLoading || totalAssignedCount === 0}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download aria-hidden="true" className="w-4 h-4" />
+            <span>Unduh CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              void onRefresh();
+            }}
+            disabled={isLoading}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+            />
+            <span>Muat ulang</span>
+          </button>
+        </div>
       </div>
 
       <div
