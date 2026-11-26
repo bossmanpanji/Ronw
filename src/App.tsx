@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UserPlus, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+import { JobSummaryCard } from './components/JobSummaryCard';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SignupList } from './components/SignupList';
 import { TeamRosterTab } from './components/TeamRosterTab';
@@ -141,6 +142,8 @@ export default function App() {
           {activeTab === 'signup' ? (
             <div className="max-w-2xl mx-auto space-y-8 sm:space-y-10">
               <RegistrationForm onSuccess={refreshAll} />
+
+              <JobSummaryCard signups={signups} isLoading={isSignupsLoading} />
 
               <SignupList
                 signups={signups}
