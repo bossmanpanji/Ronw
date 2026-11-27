@@ -15,6 +15,11 @@ import type { GuildLeagueSignup } from '../types/signup';
 import { downloadSignupsCsv } from '../utils/csv';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { EditMemberModal } from './EditMemberModal';
+import {
+  getJobFilterLabel,
+  JobFilterDropdown,
+  type JobFilterValue,
+} from './JobFilterDropdown';
 
 interface SignupListProps {
   signups: GuildLeagueSignup[];
@@ -25,22 +30,34 @@ interface SignupListProps {
 
 export function SignupList({ signups, isLoading, error, onRefresh }: SignupListProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [jobFilter, setJobFilter] = useState<JobFilterValue>({ kind: 'all' });
   const [editingMember, setEditingMember] = useState<GuildLeagueSignup | null>(null);
   const [deletingMember, setDeletingMember] = useState<GuildLeagueSignup | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
+  const hasActiveFilter = Boolean(trimmedQuery) || jobFilter.kind !== 'all';
 
   const filteredEntries = useMemo(() => {
     const indexed = signups.map((member, idx) => ({
       member,
       orderNumber: idx + 1,
     }));
-    if (!trimmedQuery) return indexed;
-    return indexed.filter(({ member }) =>
-      member.nickname.toLowerCase().includes(trimmedQuery),
-    );
-  }, [signups, trimmedQuery]);
+    if (!hasActiveFilter) return indexed;
+
+    return indexed.filter(({ member }) => {
+      if (trimmedQuery && !member.nickname.toLowerCase().includes(trimmedQuery)) {
+        return false;
+      }
+      if (jobFilter.kind === 'job') {
+        return member.job.toLowerCase() === jobFilter.jobName.toLowerCase();
+      }
+      if (jobFilter.kind === 'group') {
+        return getJobByName(member.job).group === jobFilter.group;
+      }
+      return true;
+    });
+  }, [signups, trimmedQuery, jobFilter, hasActiveFilter]);
 
   return (
     <section aria-labelledby="list-heading" className="space-y-4">
@@ -80,36 +97,45 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
 
       {signups.length > 0 && (
         <div className="space-y-1.5">
-          <div className="relative">
-            <Search
-              aria-hidden="true"
-              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <div className="relative flex-1 min-w-0">
+              <Search
+                aria-hidden="true"
+                className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              />
+              <input
+                id="member-search-input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nick in-game anggota..."
+                aria-label="Cari nick in-game anggota"
+                className={`w-full min-h-[44px] pl-10 py-2.5 rounded-xl border border-slate-300 bg-white text-sm sm:text-base text-slate-900 placeholder:text-slate-400 shadow-xs transition-colors hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
+                  searchQuery ? 'pr-11' : 'pr-3.5'
+                }`}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Hapus pencarian"
+                  className="min-h-[44px] min-w-[44px] absolute right-0 top-1/2 -translate-y-1/2 rounded-xl text-slate-400 hover:text-slate-700 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+                >
+                  <X aria-hidden="true" className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <JobFilterDropdown
+              signups={signups}
+              value={jobFilter}
+              onChange={setJobFilter}
             />
-            <input
-              id="member-search-input"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nick in-game anggota..."
-              aria-label="Cari nick in-game anggota"
-              className={`w-full min-h-[44px] pl-10 py-2.5 rounded-xl border border-slate-300 bg-white text-sm sm:text-base text-slate-900 placeholder:text-slate-400 shadow-xs transition-colors hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
-                searchQuery ? 'pr-11' : 'pr-3.5'
-              }`}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                aria-label="Hapus pencarian"
-                className="min-h-[44px] min-w-[44px] absolute right-0 top-1/2 -translate-y-1/2 rounded-xl text-slate-400 hover:text-slate-700 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
-              >
-                <X aria-hidden="true" className="w-4 h-4" />
-              </button>
-            )}
           </div>
-          {trimmedQuery && (
+          {hasActiveFilter && (
             <p className="text-xs text-slate-500 tabular-nums px-1">
               Menampilkan {filteredEntries.length} dari {signups.length} anggota
+              {jobFilter.kind !== 'all' ? ` · ${getJobFilterLabel(jobFilter)}` : ''}
             </p>
           )}
         </div>
@@ -147,13 +173,20 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
           </div>
         ) : filteredEntries.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-slate-500 space-y-2">
-            <p>Tidak ada anggota dengan nama &ldquo;{searchQuery.trim()}&rdquo;.</p>
+            <p>
+              Tidak ada anggota yang cocok
+              {trimmedQuery ? ` dengan nama "${searchQuery.trim()}"` : ''}
+              {jobFilter.kind !== 'all' ? ` pada ${getJobFilterLabel(jobFilter)}` : ''}.
+            </p>
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                setJobFilter({ kind: 'all' });
+              }}
               className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold text-[#3730A3] hover:bg-indigo-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
             >
-              Reset pencarian
+              Reset filter
             </button>
           </div>
         ) : (
