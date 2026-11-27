@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { makeSlotKey, type DivisionId } from '../constants/teams';
 import type {
+  GuildEventLeave,
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
   GuildLeagueRosterTitle,
@@ -21,6 +22,7 @@ const SETTINGS_TABLE = 'guild_league_settings';
 const GUILD_LOGO_SETTING_KEY = 'guild_logo';
 const PUBLISH_MESSAGE_ID_KEY = 'publish_message_id';
 const PUBLISH_MESSAGE_EN_KEY = 'publish_message_en';
+const LEAVE_SETTING_PREFIX = 'leave:';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -658,5 +660,149 @@ export async function savePublishLineupMessages(params: {
         'Gagal menyimpan pesan publikasi ke database. Silakan coba lagi.',
       ),
     );
+  }
+}
+
+function makeLeaveSettingKey(eventKey: string, signupId: string): string {
+  return `${LEAVE_SETTING_PREFIX}${eventKey}:${signupId}`;
+}
+
+export async function fetchGuildEventLeaves(activeEventKey: string): Promise<GuildEventLeave[]> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from(SETTINGS_TABLE)
+    .select('setting_key, setting_value, updated_at')
+    .like('setting_key', `${LEAVE_SETTING_PREFIX}%`);
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return [];
+    }
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat status izin anggota. Silakan coba muat ulang.'),
+    );
+  }
+
+  const activePrefix = `${LEAVE_SETTING_PREFIX}${activeEventKey}:`;
+  const activeLeaves: GuildEventLeave[] = [];
+  const expiredKeys: string[] = [];
+
+  for (const row of (data ?? []) as {
+    setting_key?: unknown;
+    setting_value?: unknown;
+    updated_at?: unknown;
+  }[]) {
+    if (typeof row.setting_key !== 'string' || typeof row.setting_value !== 'string') {
+      continue;
+    }
+
+    if (!row.setting_key.startsWith(activePrefix)) {
+      expiredKeys.push(row.setting_key);
+      continue;
+    }
+
+    const signupId = row.setting_key.slice(activePrefix.length);
+    if (!signupId) continue;
+
+    try {
+      const parsed = JSON.parse(row.setting_value) as { message?: unknown; updated_at?: unknown };
+      const message = typeof parsed.message === 'string' ? parsed.message.trim() : '';
+      if (!message) continue;
+      activeLeaves.push({
+        event_key: activeEventKey,
+        signup_id: signupId,
+        message,
+        updated_at:
+          typeof parsed.updated_at === 'string'
+            ? parsed.updated_at
+            : typeof row.updated_at === 'string'
+              ? row.updated_at
+              : new Date().toISOString(),
+      });
+    } catch {
+      // Ignore malformed leave entries
+    }
+  }
+
+  if (expiredKeys.length > 0) {
+    void client.from(SETTINGS_TABLE).delete().in('setting_key', expiredKeys);
+  }
+
+  return activeLeaves;
+}
+
+export async function upsertGuildEventLeave(params: {
+  eventKey: string;
+  signupId: string;
+  message: string;
+}): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const now = new Date().toISOString();
+  const cleanMessage = params.message.trim();
+  const settingKey = makeLeaveSettingKey(params.eventKey, params.signupId);
+
+  const { error } = await client.from(SETTINGS_TABLE).upsert(
+    {
+      setting_key: settingKey,
+      setting_value: JSON.stringify({
+        event_key: params.eventKey,
+        signup_id: params.signupId,
+        message: cleanMessage,
+        updated_at: now,
+      }),
+      updated_at: now,
+    },
+    { onConflict: 'setting_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal menyimpan izin hadir ke database. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function deleteGuildEventLeave(eventKey: string, signupId: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const settingKey = makeLeaveSettingKey(eventKey, signupId);
+  const { error } = await client.from(SETTINGS_TABLE).delete().eq('setting_key', settingKey);
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal membatalkan status izin. Silakan coba lagi.'),
+    );
+  }
+}
+
+export async function cleanupExpiredGuildEventLeaves(activeEventKey: string): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) return;
+
+  const activePrefix = `${LEAVE_SETTING_PREFIX}${activeEventKey}:`;
+  const { data, error } = await client
+    .from(SETTINGS_TABLE)
+    .select('setting_key')
+    .like('setting_key', `${LEAVE_SETTING_PREFIX}%`);
+
+  if (error || !data) return;
+
+  const expiredKeys = (data as { setting_key?: unknown }[])
+    .map((r) => (typeof r.setting_key === 'string' ? r.setting_key : null))
+    .filter((key): key is string => Boolean(key && !key.startsWith(activePrefix)));
+
+  if (expiredKeys.length > 0) {
+    await client.from(SETTINGS_TABLE).delete().in('setting_key', expiredKeys);
   }
 }

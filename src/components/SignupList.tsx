@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { getJobByName } from '../constants/jobs';
-import type { GuildLeagueSignup } from '../types/signup';
+import type { GuildEventLeave, GuildLeagueSignup } from '../types/signup';
 import { downloadSignupsCsv } from '../utils/csv';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { EditMemberModal } from './EditMemberModal';
@@ -23,12 +23,19 @@ import {
 
 interface SignupListProps {
   signups: GuildLeagueSignup[];
+  leaveBySignupId?: Map<string, GuildEventLeave>;
   isLoading: boolean;
   error: string | null;
   onRefresh: () => Promise<void> | void;
 }
 
-export function SignupList({ signups, isLoading, error, onRefresh }: SignupListProps) {
+export function SignupList({
+  signups,
+  leaveBySignupId,
+  isLoading,
+  error,
+  onRefresh,
+}: SignupListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [jobFilter, setJobFilter] = useState<JobFilterValue>({ kind: 'all' });
   const [editingMember, setEditingMember] = useState<GuildLeagueSignup | null>(null);
@@ -193,6 +200,7 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
           <ul className="divide-y divide-slate-100">
             {filteredEntries.map(({ member, orderNumber }) => {
               const jobMeta = getJobByName(member.job);
+              const memberLeave = leaveBySignupId?.get(member.id);
               return (
                 <li
                   key={member.id}
@@ -202,19 +210,33 @@ export function SignupList({ signups, isLoading, error, onRefresh }: SignupListP
                     <span className="text-xs font-medium text-slate-400 tabular-nums w-6 shrink-0 pt-1 sm:pt-0">
                       {orderNumber}.
                     </span>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 min-w-0 flex-1">
-                      <span className="text-sm sm:text-base font-medium text-slate-900 break-words min-w-0">
-                        {member.nickname}
-                      </span>
-                      <span
-                        style={{
-                          backgroundColor: jobMeta.color,
-                          color: jobMeta.textColor,
-                        }}
-                        className="self-start sm:self-auto shrink-0 inline-flex items-center px-2.5 py-0.5 sm:py-1 rounded-md text-xs font-semibold whitespace-nowrap"
-                      >
-                        {jobMeta.name}
-                      </span>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          <span className="text-sm sm:text-base font-medium text-slate-900 break-words min-w-0">
+                            {member.nickname}
+                          </span>
+                          {memberLeave && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 shrink-0">
+                              Izin
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          style={{
+                            backgroundColor: jobMeta.color,
+                            color: jobMeta.textColor,
+                          }}
+                          className="self-start sm:self-auto shrink-0 inline-flex items-center px-2.5 py-0.5 sm:py-1 rounded-md text-xs font-semibold whitespace-nowrap"
+                        >
+                          {jobMeta.name}
+                        </span>
+                      </div>
+                      {memberLeave && (
+                        <p className="text-xs text-amber-800 break-words">
+                          Izin: {memberLeave.message}
+                        </p>
+                      )}
                     </div>
                   </div>
 

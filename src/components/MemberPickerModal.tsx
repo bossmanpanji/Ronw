@@ -11,6 +11,7 @@ import {
 } from '../constants/teams';
 import { clearGuildLeagueTeamSlot, upsertGuildLeagueTeamSlot } from '../lib/supabase';
 import type {
+  GuildEventLeave,
   GuildLeagueRosterTitle,
   GuildLeagueSignup,
   GuildLeagueTeamSlot,
@@ -26,6 +27,7 @@ interface MemberPickerModalProps {
   signups: GuildLeagueSignup[];
   allSlots: GuildLeagueTeamSlot[];
   rosterTitles?: GuildLeagueRosterTitle[];
+  leaveBySignupId?: Map<string, GuildEventLeave>;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -40,6 +42,7 @@ export function MemberPickerModal({
   signups,
   allSlots,
   rosterTitles = [],
+  leaveBySignupId,
   onClose,
   onSaved,
 }: MemberPickerModalProps) {
@@ -224,6 +227,7 @@ export function MemberPickerModal({
           ) : (
             filteredSignups.map((member) => {
               const jobMeta = getJobByName(member.job);
+              const memberLeave = leaveBySignupId?.get(member.id);
               const memberSlots = assignmentsBySignupId.get(member.id) ?? [];
               const isCurrentSlotMember = currentSlot?.signup_id === member.id;
               const sameDivisionSlot = memberSlots.find(
@@ -247,16 +251,26 @@ export function MemberPickerModal({
                   }`}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                       <span className="text-sm sm:text-base font-semibold text-slate-900 break-words">
                         {member.nickname}
                       </span>
+                      {memberLeave && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 shrink-0">
+                          Izin
+                        </span>
+                      )}
                       {isCurrentSlotMember && (
                         <span className="text-xs font-semibold text-[#3730A3] shrink-0">
                           (Terpilih)
                         </span>
                       )}
                     </div>
+                    {memberLeave && (
+                      <p className="mt-0.5 text-xs text-amber-800 break-words">
+                        Izin: {memberLeave.message}
+                      </p>
+                    )}
                     {(sameDivisionSlot || otherDivisionSlots.length > 0) && (
                       <div className="mt-0.5 text-xs text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         {sameDivisionSlot && (

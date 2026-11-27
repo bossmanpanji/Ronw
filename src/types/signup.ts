@@ -39,3 +39,10 @@ export interface GuildLeagueRosterTitle {
   title: string;
   updated_at: string;
 }
+
+export interface GuildEventLeave {
+  event_key: string;
+  signup_id: string;
+  message: string;
+  updated_at: string;
+}

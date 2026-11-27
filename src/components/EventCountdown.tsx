@@ -1,77 +1,23 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { CalendarClock, Check, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarClock, ChevronDown, UserCheck } from 'lucide-react';
+import type { GuildEventLeave, GuildLeagueSignup } from '../types/signup';
+import { getActiveGuildEvent, splitRemainingTime } from '../utils/guildEvents';
 
-const STORAGE_KEY = 'java_glitch_guild_league_target_at';
-
-function getDefaultNextEventDate(): Date {
-  const now = new Date();
-  const target = new Date(now);
-  // Default lokal: jadwal Guild League berikutnya pada hari Sabtu pukul 20:00 waktu lokal
-  const currentDay = now.getDay(); // 0 = Minggu, 6 = Sabtu
-  let daysUntilSaturday = (6 - currentDay + 7) % 7;
-  target.setHours(20, 0, 0, 0);
-
-  if (daysUntilSaturday === 0 && target.getTime() <= now.getTime()) {
-    daysUntilSaturday = 7;
-  }
-
-  target.setDate(now.getDate() + daysUntilSaturday);
-  return target;
+interface EventCountdownProps {
+  signups: GuildLeagueSignup[];
+  leaves: GuildEventLeave[];
+  onOpenLeaveModal: () => void;
+  onEventKeyChange: (nextEventKey: string) => void;
 }
 
-function toDatetimeLocalInputValue(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const hh = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
-
-function loadInitialTarget(): { targetMs: number; isCustom: boolean } {
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsedMs = Number(saved);
-      if (Number.isFinite(parsedMs) && parsedMs > 0) {
-        return { targetMs: parsedMs, isCustom: true };
-      }
-    }
-  } catch {
-    // Abaikan jika localStorage tidak tersedia
-  }
-  return { targetMs: getDefaultNextEventDate().getTime(), isCustom: false };
-}
-
-function formatEventDateId(timestampMs: number): string {
-  const date = new Date(timestampMs);
-  return new Intl.DateTimeFormat('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function splitRemainingTime(diffMs: number) {
-  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return { days, hours, minutes, seconds };
-}
-
-export function EventCountdown() {
-  const [{ targetMs, isCustom }, setTargetState] = useState(loadInitialTarget);
+export function EventCountdown({
+  signups,
+  leaves,
+  onOpenLeaveModal,
+  onEventKeyChange,
+}: EventCountdownProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputValue, setInputValue] = useState(() =>
-    toDatetimeLocalInputValue(new Date(targetMs)),
-  );
-  const [inputError, setInputError] = useState<string | null>(null);
+  const [showLeavePreview, setShowLeavePreview] = useState(false);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -80,57 +26,35 @@ export function EventCountdown() {
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const remainingMs = targetMs - nowMs;
-  const isEventStarted = remainingMs <= 0;
+  const activeEvent = useMemo(() => getActiveGuildEvent(nowMs), [nowMs]);
+
+  useEffect(() => {
+    onEventKeyChange(activeEvent.eventKey);
+  }, [activeEvent.eventKey, onEventKeyChange]);
+
+  const remainingMs = activeEvent.countdownTargetMs - nowMs;
   const { days, hours, minutes, seconds } = splitRemainingTime(remainingMs);
+  const isLive = activeEvent.status === 'live';
 
-  function openEditor() {
-    setInputValue(toDatetimeLocalInputValue(new Date(targetMs)));
-    setInputError(null);
-    setIsEditing(true);
-  }
-
-  function handleSaveSchedule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!inputValue) {
-      setInputError('Pilih tanggal dan jam event terlebih dahulu.');
-      return;
+  const signupMap = useMemo(() => {
+    const map = new Map<string, GuildLeagueSignup>();
+    for (const member of signups) {
+      map.set(member.id, member);
     }
+    return map;
+  }, [signups]);
 
-    const parsed = new Date(inputValue);
-    if (Number.isNaN(parsed.getTime())) {
-      setInputError('Format tanggal atau jam tidak valid.');
-      return;
-    }
-
-    const nextMs = parsed.getTime();
-    try {
-      window.localStorage.setItem(STORAGE_KEY, String(nextMs));
-    } catch {
-      // Abaikan jika localStorage penuh/diblokir
-    }
-
-    setTargetState({ targetMs: nextMs, isCustom: true });
-    setNowMs(Date.now());
-    setInputError(null);
-    setIsEditing(false);
-  }
-
-  function handleResetDefault() {
-    const defaultDate = getDefaultNextEventDate();
-    const defaultMs = defaultDate.getTime();
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Abaikan
-    }
-
-    setTargetState({ targetMs: defaultMs, isCustom: false });
-    setInputValue(toDatetimeLocalInputValue(defaultDate));
-    setNowMs(Date.now());
-    setInputError(null);
-    setIsEditing(false);
-  }
+  const activeLeaveEntries = useMemo(() => {
+    return leaves
+      .filter((leave) => leave.event_key === activeEvent.eventKey)
+      .map((leave) => ({
+        leave,
+        member: signupMap.get(leave.signup_id),
+      }))
+      .filter((entry): entry is { leave: GuildEventLeave; member: GuildLeagueSignup } =>
+        Boolean(entry.member),
+      );
+  }, [leaves, activeEvent.eventKey, signupMap]);
 
   const countdownUnits = [
     { label: 'Hari', value: String(days).padStart(2, '0') },
@@ -142,112 +66,94 @@ export function EventCountdown() {
   return (
     <section aria-labelledby="countdown-heading" className="max-w-2xl mx-auto">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div className="min-w-0">
-            <h2
-              id="countdown-heading"
-              className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2"
-            >
-              <CalendarClock aria-hidden="true" className="w-4 h-4 text-[#3730A3] shrink-0" />
-              <span>Hitung Mundur Guild League</span>
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-              {formatEventDateId(targetMs)} · {isCustom ? 'Jadwal manual' : 'Jadwal lokal'}
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2
+                id="countdown-heading"
+                className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2"
+              >
+                <CalendarClock aria-hidden="true" className="w-4 h-4 text-[#3730A3] shrink-0" />
+                <span>{activeEvent.event.name}</span>
+              </h2>
+              {isLive && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-100 border border-emerald-300 text-xs font-bold text-emerald-800">
+                  Berlangsung
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-slate-600">{activeEvent.dateLabelWib}</p>
           </div>
 
           <button
             type="button"
-            onClick={() => {
-              if (isEditing) {
-                setIsEditing(false);
-                setInputError(null);
-              } else {
-                openEditor();
-              }
-            }}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+            onClick={onOpenLeaveModal}
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-xs sm:text-sm font-bold text-slate-950 shadow-xs transition-all inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2"
           >
-            {isEditing ? 'Tutup' : 'Atur Jadwal'}
+            <UserCheck aria-hidden="true" className="w-4 h-4" />
+            <span>Izin Hadir</span>
           </button>
         </div>
 
-        {isEditing && (
-          <form
-            onSubmit={handleSaveSchedule}
-            noValidate
-            className="pt-3 border-t border-slate-100 space-y-3"
-          >
-            <div>
-              <label
-                htmlFor="event-datetime-input"
-                className="block text-xs sm:text-sm font-semibold text-slate-800 mb-1.5"
-              >
-                Tanggal &amp; Jam Event Berikutnya
-              </label>
-              <input
-                id="event-datetime-input"
-                type="datetime-local"
-                value={inputValue}
-                onChange={(e) => {
-                  setInputValue(e.target.value);
-                  if (inputError) setInputError(null);
-                }}
-                aria-invalid={Boolean(inputError)}
-                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white text-sm sm:text-base text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
-              />
-              {inputError && (
-                <p className="mt-1.5 text-xs font-medium text-red-600" role="alert">
-                  {inputError}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="submit"
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#3730A3] hover:bg-[#312E81] text-white text-sm font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1"
-              >
-                <Check aria-hidden="true" className="w-4 h-4" />
-                <span>Simpan Jadwal</span>
-              </button>
-
-              {isCustom && (
-                <button
-                  type="button"
-                  onClick={handleResetDefault}
-                  className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold inline-flex items-center gap-1.5 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
-                >
-                  <RotateCcw aria-hidden="true" className="w-4 h-4" />
-                  <span>Reset Default</span>
-                </button>
-              )}
-            </div>
-          </form>
-        )}
-
-        {isEventStarted ? (
-          <div className="rounded-xl bg-indigo-50 px-4 py-3.5 text-center space-y-1">
-            <p className="text-sm sm:text-base font-bold text-[#3730A3]">
-              Event Guild League sudah dimulai!
-            </p>
-            <p className="text-xs sm:text-sm text-slate-600">
-              Klik &ldquo;Atur Jadwal&rdquo; untuk menetapkan jadwal pertandingan berikutnya.
-            </p>
-          </div>
-        ) : (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500">
+            {isLive
+              ? 'Event sedang berlangsung · sisa waktu menuju selesai (22:00 UTC+7):'
+              : 'Hitung mundur menuju event dimulai:'}
+          </p>
           <div className="grid grid-cols-4 gap-2 sm:gap-3">
             {countdownUnits.map((unit) => (
               <div
                 key={unit.label}
-                className="rounded-xl bg-slate-50 py-2.5 sm:py-3 px-2 text-center"
+                className={`rounded-xl py-2.5 sm:py-3 px-2 text-center ${
+                  isLive ? 'bg-emerald-50 border border-emerald-200/80' : 'bg-slate-50'
+                }`}
               >
-                <div className="text-xl sm:text-2xl font-bold text-slate-900 tabular-nums leading-tight">
+                <div
+                  className={`text-xl sm:text-2xl font-bold tabular-nums leading-tight ${
+                    isLive ? 'text-emerald-900' : 'text-slate-900'
+                  }`}
+                >
                   {unit.value}
                 </div>
                 <div className="mt-0.5 text-xs font-medium text-slate-500">{unit.label}</div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {activeLeaveEntries.length > 0 && (
+          <div className="pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowLeavePreview((prev) => !prev)}
+              aria-expanded={showLeavePreview}
+              className="w-full min-h-[40px] px-2 py-1.5 rounded-xl hover:bg-slate-50 text-left flex items-center justify-between gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+            >
+              <span className="text-xs sm:text-sm font-semibold text-amber-900 tabular-nums">
+                {activeLeaveEntries.length} anggota berstatus Izin untuk event ini
+              </span>
+              <ChevronDown
+                aria-hidden="true"
+                className={`w-4 h-4 text-slate-500 shrink-0 transition-transform ${
+                  showLeavePreview ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {showLeavePreview && (
+              <ul className="mt-2 space-y-1.5 px-2 pb-1">
+                {activeLeaveEntries.map(({ leave, member }) => (
+                  <li
+                    key={leave.signup_id}
+                    className="rounded-xl bg-amber-50/75 border border-amber-200/80 px-3 py-2 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2"
+                  >
+                    <span className="font-bold text-slate-900 shrink-0">{member.nickname}</span>
+                    <span className="text-slate-700 break-words">{leave.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </div>

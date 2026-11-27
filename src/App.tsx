@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Shield, UserPlus, Users } from 'lucide-react';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { EventCountdown } from './components/EventCountdown';
 import { GuildInfoCard } from './components/GuildInfoCard';
 import { JobSummaryCard } from './components/JobSummaryCard';
+import { LeaveRequestModal } from './components/LeaveRequestModal';
 import { PartyTetapTab } from './components/PartyTetapTab';
 import { RegistrationForm } from './components/RegistrationForm';
 import { SignupList } from './components/SignupList';
 import { TeamRosterTab } from './components/TeamRosterTab';
 import { Toast, type ToastData } from './components/Toast';
 import {
+  cleanupExpiredGuildEventLeaves,
+  fetchGuildEventLeaves,
   fetchGuildLeagueFixedParties,
   fetchGuildLeagueFixedPartySlots,
   fetchGuildLeagueRosterTitles,
@@ -17,12 +21,14 @@ import {
   fetchGuildLogo,
 } from './lib/supabase';
 import type {
+  GuildEventLeave,
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
   GuildLeagueRosterTitle,
   GuildLeagueSignup,
   GuildLeagueTeamSlot,
 } from './types/signup';
+import { getActiveGuildEvent } from './utils/guildEvents';
 
 type ActiveTab = 'signup' | 'roster' | 'party';
 
@@ -52,6 +58,15 @@ export default function App() {
       return null;
     }
   });
+
+  const [currentEventKey, setCurrentEventKey] = useState<string>(
+    () => getActiveGuildEvent().eventKey,
+  );
+  const currentEventKeyRef = useRef(currentEventKey);
+  currentEventKeyRef.current = currentEventKey;
+
+  const [eventLeaves, setEventLeaves] = useState<GuildEventLeave[]>([]);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   const showToast = useCallback((nextToast: Omit<ToastData, 'id'>) => {
     setToast({
@@ -144,6 +159,41 @@ export default function App() {
     }
   }, []);
 
+  const loadEventLeaves = useCallback(async (eventKey?: string) => {
+    const targetKey = eventKey ?? currentEventKeyRef.current;
+    try {
+      const leaves = await fetchGuildEventLeaves(targetKey);
+      setEventLeaves(leaves);
+    } catch {
+      // Keep existing leave state silently if fetch fails
+    }
+  }, []);
+
+  const handleEventKeyChange = useCallback(
+    (nextEventKey: string) => {
+      if (nextEventKey === currentEventKeyRef.current) return;
+      currentEventKeyRef.current = nextEventKey;
+      setCurrentEventKey(nextEventKey);
+      setEventLeaves([]);
+      void cleanupExpiredGuildEventLeaves(nextEventKey).then(() =>
+        loadEventLeaves(nextEventKey),
+      );
+    },
+    [loadEventLeaves],
+  );
+
+  const leaveBySignupId = useMemo(() => {
+    const map = new Map<string, GuildEventLeave>();
+    for (const leave of eventLeaves) {
+      if (leave.event_key === currentEventKey) {
+        map.set(leave.signup_id, leave);
+      }
+    }
+    return map;
+  }, [eventLeaves, currentEventKey]);
+
+  const activeEventInfo = useMemo(() => getActiveGuildEvent(), [currentEventKey]);
+
   const refreshAll = useCallback(async () => {
     await Promise.all([
       loadSignups(),
@@ -151,8 +201,16 @@ export default function App() {
       loadFixedParties(),
       loadRosterTitles(),
       loadGuildLogo(),
+      loadEventLeaves(),
     ]);
-  }, [loadSignups, loadTeamSlots, loadFixedParties, loadRosterTitles, loadGuildLogo]);
+  }, [
+    loadSignups,
+    loadTeamSlots,
+    loadFixedParties,
+    loadRosterTitles,
+    loadGuildLogo,
+    loadEventLeaves,
+  ]);
 
   useEffect(() => {
     void refreshAll();
@@ -181,6 +239,13 @@ export default function App() {
           logoUrl={guildLogoUrl}
           onLogoSaved={(nextLogoUrl) => setGuildLogoUrl(nextLogoUrl)}
           onNotify={showToast}
+        />
+
+        <EventCountdown
+          signups={signups}
+          leaves={eventLeaves}
+          onOpenLeaveModal={() => setIsLeaveModalOpen(true)}
+          onEventKeyChange={handleEventKeyChange}
         />
 
         <nav aria-label="Menu utama" className="max-w-2xl mx-auto">
@@ -256,6 +321,7 @@ export default function App() {
 
                 <SignupList
                   signups={signups}
+                  leaveBySignupId={leaveBySignupId}
                   isLoading={isSignupsLoading}
                   error={signupsError}
                   onRefresh={refreshAll}
@@ -266,6 +332,7 @@ export default function App() {
                 signups={signups}
                 teamSlots={teamSlots}
                 rosterTitles={rosterTitles}
+                leaveBySignupId={leaveBySignupId}
                 isLoading={isSignupsLoading || isSlotsLoading}
                 error={slotsError ?? signupsError}
                 onRefresh={refreshAll}
@@ -276,6 +343,7 @@ export default function App() {
                 signups={signups}
                 parties={fixedParties}
                 partySlots={fixedPartySlots}
+                leaveBySignupId={leaveBySignupId}
                 isLoading={isSignupsLoading || isPartiesLoading}
                 error={partiesError ?? signupsError}
                 onRefresh={refreshAll}
@@ -285,6 +353,19 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {isLeaveModalOpen && (
+        <LeaveRequestModal
+          eventKey={currentEventKey}
+          eventName={activeEventInfo.event.name}
+          eventDateLabel={activeEventInfo.dateLabelWib}
+          signups={signups}
+          leaveBySignupId={leaveBySignupId}
+          onClose={() => setIsLeaveModalOpen(false)}
+          onSaved={() => loadEventLeaves(currentEventKey)}
+          onNotify={showToast}
+        />
+      )}
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>

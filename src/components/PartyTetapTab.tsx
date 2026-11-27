@@ -18,6 +18,7 @@ import {
   renameGuildLeagueFixedParty,
 } from '../lib/supabase';
 import type {
+  GuildEventLeave,
   GuildLeagueFixedParty,
   GuildLeagueFixedPartySlot,
   GuildLeagueSignup,
@@ -30,6 +31,7 @@ interface PartyTetapTabProps {
   signups: GuildLeagueSignup[];
   parties: GuildLeagueFixedParty[];
   partySlots: GuildLeagueFixedPartySlot[];
+  leaveBySignupId?: Map<string, GuildEventLeave>;
   isLoading: boolean;
   error: string | null;
   onRefresh: () => Promise<void> | void;
@@ -54,6 +56,7 @@ export function PartyTetapTab({
   signups,
   parties,
   partySlots,
+  leaveBySignupId,
   isLoading,
   error,
   onRefresh,
@@ -417,6 +420,7 @@ export function PartyTetapTab({
                     }
 
                     const jobMeta = getJobByName(assignedMember.job);
+                    const memberLeave = leaveBySignupId?.get(assignedMember.id);
 
                     return (
                       <li
@@ -435,19 +439,33 @@ export function PartyTetapTab({
                           <span className="text-xs font-medium text-slate-400 tabular-nums w-4 shrink-0 pt-1 sm:pt-0">
                             {slotNumber}.
                           </span>
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0 flex-1">
-                            <span className="text-sm sm:text-base font-medium text-slate-900 break-words min-w-0">
-                              {assignedMember.nickname}
-                            </span>
-                            <span
-                              style={{
-                                backgroundColor: jobMeta.color,
-                                color: jobMeta.textColor,
-                              }}
-                              className="self-start sm:self-auto shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
-                            >
-                              {jobMeta.name}
-                            </span>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                <span className="text-sm sm:text-base font-medium text-slate-900 break-words min-w-0">
+                                  {assignedMember.nickname}
+                                </span>
+                                {memberLeave && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-[11px] font-bold text-amber-900 shrink-0">
+                                    Izin
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                style={{
+                                  backgroundColor: jobMeta.color,
+                                  color: jobMeta.textColor,
+                                }}
+                                className="self-start sm:self-auto shrink-0 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
+                              >
+                                {jobMeta.name}
+                              </span>
+                            </div>
+                            {memberLeave && (
+                              <p className="text-xs text-amber-800 break-words">
+                                Izin: {memberLeave.message}
+                              </p>
+                            )}
                           </div>
                         </button>
 
@@ -485,6 +503,7 @@ export function PartyTetapTab({
           signups={signups}
           parties={parties}
           allSlots={partySlots}
+          leaveBySignupId={leaveBySignupId}
           onClose={() => setPickerTarget(null)}
           onSaved={async () => {
             setPickerTarget(null);
