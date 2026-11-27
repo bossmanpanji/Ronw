@@ -91,7 +91,7 @@ export default function App() {
       const message =
         error instanceof Error
           ? error.message
-          : 'Gagal memuat susunan team. Silakan coba muat ulang.';
+          : 'Gagal memuat Lineup. Silakan coba muat ulang.';
       setSlotsError(message);
     } finally {
       setIsSlotsLoading(false);
@@ -160,7 +160,7 @@ export default function App() {
 
   const tabs: { id: ActiveTab; label: string; count?: number; icon: typeof UserPlus }[] = [
     { id: 'signup', label: 'List Anggota', count: signups.length, icon: UserPlus },
-    { id: 'roster', label: 'Susunan Team', icon: Users },
+    { id: 'roster', label: 'Lineup', icon: Users },
     { id: 'party', label: 'Party Tetap', count: fixedParties.length, icon: Shield },
   ];
 

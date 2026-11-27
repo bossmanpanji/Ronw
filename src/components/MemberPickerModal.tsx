@@ -214,8 +214,8 @@ export function MemberPickerModal({
         <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
           {signups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm text-slate-500">
-              Belum ada anggota di Daftar Anggota. Silakan daftar terlebih dahulu di tab
-              Pendaftaran.
+              Belum ada anggota di Daftar Anggota. Silakan daftar terlebih dahulu di tab List
+              Anggota.
             </div>
           ) : filteredSignups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm text-slate-500">

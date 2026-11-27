@@ -62,6 +62,9 @@ function toFriendlyErrorMessage(error: unknown, fallback: string): string {
     if (code === '23505' || raw.includes('duplicate key') || raw.includes('unique constraint')) {
       return 'Nick tersebut sudah dipakai anggota lain. Gunakan nick yang berbeda.';
     }
+    if (code === '23514' || raw.includes('check constraint')) {
+      return 'Constraint divisi di database belum mendukung divisi Siege (siege-1 s/d siege-4). Perbarui check constraint kolom division pada tabel guild_league_team_slots di Supabase.';
+    }
     if (raw.includes('failed to fetch') || raw.includes('network') || raw.includes('fetch')) {
       return 'Tidak dapat terhubung ke server. Periksa koneksi internet kamu lalu coba lagi.';
     }
@@ -238,7 +241,7 @@ export async function fetchGuildLeagueTeamSlots(): Promise<GuildLeagueTeamSlot[]
 
   if (error) {
     throw new Error(
-      toFriendlyErrorMessage(error, 'Gagal memuat susunan team. Silakan coba muat ulang.'),
+      toFriendlyErrorMessage(error, 'Gagal memuat Lineup. Silakan coba muat ulang.'),
     );
   }
 

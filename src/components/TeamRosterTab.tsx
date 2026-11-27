@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Download,
   Loader2,
+  Megaphone,
   Pencil,
   Plus,
   RefreshCw,
@@ -13,6 +14,9 @@ import {
 import { getJobByName } from '../constants/jobs';
 import {
   DIVISIONS,
+  getCategoryLabel,
+  getDivisionsByCategory,
+  LINEUP_CATEGORIES,
   makeDivisionTitleKey,
   makeSlotKey,
   makeTeamTitleKey,
@@ -20,6 +24,7 @@ import {
   TEAMS_PER_DIVISION,
   type DivisionConfig,
   type DivisionId,
+  type LineupCategoryId,
 } from '../constants/teams';
 import {
   clearGuildLeagueTeamSlot,
@@ -33,6 +38,7 @@ import type {
 } from '../types/signup';
 import { downloadTeamRosterCsv } from '../utils/csv';
 import { MemberPickerModal } from './MemberPickerModal';
+import { PublishLineupModal } from './PublishLineupModal';
 import type { ToastData } from './Toast';
 
 interface TeamRosterTabProps {
@@ -83,6 +89,7 @@ export function TeamRosterTab({
   onRefresh,
   onNotify,
 }: TeamRosterTabProps) {
+  const [activeCategory, setActiveCategory] = useState<LineupCategoryId>('guild-league');
   const [selectedDivision, setSelectedDivision] = useState<DivisionId>('main-1');
   const [searchQuery, setSearchQuery] = useState('');
   const [pickerTarget, setPickerTarget] = useState<ActiveSlotTarget | null>(null);
@@ -94,6 +101,7 @@ export function TeamRosterTab({
   const [titleInputTouched, setTitleInputTouched] = useState(false);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
 
   const trimmedQuery = searchQuery.trim().toLowerCase();
   const titleValidationError = validateRosterTitle(titleInputValue);
@@ -160,6 +168,25 @@ export function TeamRosterTab({
     return counts;
   }, [teamSlots, signupMap]);
 
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<LineupCategoryId, number>();
+    for (const cat of LINEUP_CATEGORIES) {
+      counts.set(cat.id, 0);
+    }
+    for (const division of DIVISIONS) {
+      counts.set(
+        division.category,
+        (counts.get(division.category) ?? 0) + (divisionCounts.get(division.id) ?? 0),
+      );
+    }
+    return counts;
+  }, [divisionCounts]);
+
+  const categoryDivisions = useMemo(
+    () => getDivisionsByCategory(activeCategory),
+    [activeCategory],
+  );
+
   const totalAssignedCount = useMemo(() => {
     let total = 0;
     for (const count of divisionCounts.values()) {
@@ -169,9 +196,18 @@ export function TeamRosterTab({
   }, [divisionCounts]);
 
   const currentDivisionConfig =
-    DIVISIONS.find((d) => d.id === selectedDivision) ?? DIVISIONS[0];
-  const currentDivisionCount = divisionCounts.get(selectedDivision) ?? 0;
+    categoryDivisions.find((d) => d.id === selectedDivision) ?? categoryDivisions[0];
+  const currentDivisionCount = divisionCounts.get(currentDivisionConfig.id) ?? 0;
   const maxSlotsPerDivision = TEAMS_PER_DIVISION * SLOTS_PER_TEAM;
+
+  function handleSelectCategory(categoryId: LineupCategoryId) {
+    setActiveCategory(categoryId);
+    const firstDivision = getDivisionsByCategory(categoryId)[0];
+    if (firstDivision) {
+      setSelectedDivision(firstDivision.id);
+    }
+    setActionError(null);
+  }
 
   const teamNumbers = useMemo(
     () => Array.from({ length: TEAMS_PER_DIVISION }, (_, idx) => idx + 1),
@@ -318,7 +354,7 @@ export function TeamRosterTab({
                 }}
                 className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold whitespace-nowrap shrink-0 mr-0.5"
               >
-                {divisionLabel}
+                {getCategoryLabel(divisionConfig.category)} · {divisionLabel}
               </span>
             ) : (
               <span
@@ -488,7 +524,7 @@ export function TeamRosterTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="roster-heading" className="text-lg sm:text-xl font-bold text-slate-900">
-            Susunan Team
+            Lineup
           </h2>
           <p className="text-sm text-slate-600 mt-0.5">
             Pilih anggota dari Daftar Anggota untuk mengisi tiap team ({TEAMS_PER_DIVISION} team ×{' '}
@@ -496,7 +532,16 @@ export function TeamRosterTab({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsPublishModalOpen(true)}
+            className="min-h-[44px] px-4 py-2 rounded-xl bg-[#F59E0B] hover:bg-[#D97706] active:scale-[0.98] text-sm font-bold text-slate-950 shadow-xs transition-all duration-150 inline-flex items-center gap-2 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2"
+          >
+            <Megaphone aria-hidden="true" className="w-4 h-4" />
+            <span>Publikasikan Lineup</span>
+          </button>
+
           <button
             type="button"
             onClick={() => downloadTeamRosterCsv(signups, teamSlots, rosterTitles)}
@@ -536,8 +581,8 @@ export function TeamRosterTab({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nick in-game di semua team..."
-            aria-label="Cari nick in-game di susunan team"
+            placeholder="Cari nick in-game di semua lineup..."
+            aria-label="Cari nick in-game di lineup"
             className={`w-full min-h-[44px] pl-10 py-2.5 rounded-xl border border-slate-300 bg-white text-sm sm:text-base text-slate-900 placeholder:text-slate-400 shadow-xs transition-colors hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-2 ${
               searchQuery ? 'pr-11' : 'pr-3.5'
             }`}
@@ -557,8 +602,8 @@ export function TeamRosterTab({
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <p className="text-xs text-slate-600 tabular-nums">
               {searchResults.matchedTeams.length > 0
-                ? `Ditemukan ${searchResults.matchedSlotCount} kecocokan di ${searchResults.matchedTeams.length} team (semua divisi)`
-                : `Tidak ditemukan "${searchQuery.trim()}" di susunan team`}
+                ? `Ditemukan ${searchResults.matchedSlotCount} kecocokan di ${searchResults.matchedTeams.length} team (semua kategori)`
+                : `Tidak ditemukan "${searchQuery.trim()}" di lineup`}
             </p>
             <button
               type="button"
@@ -572,63 +617,104 @@ export function TeamRosterTab({
       </div>
 
       {!trimmedQuery && (
-        <div
-          role="tablist"
-          aria-label="Pilih divisi team"
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2"
-        >
-          {DIVISIONS.map((division) => {
-            const isSelected = division.id === selectedDivision;
-            const filled = divisionCounts.get(division.id) ?? 0;
+        <div className="space-y-3">
+          <div
+            role="tablist"
+            aria-label="Kategori Lineup"
+            className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-white rounded-2xl border border-slate-200 shadow-xs"
+          >
+            {LINEUP_CATEGORIES.map((category) => {
+              const isSelected = category.id === activeCategory;
+              const filled = categoryCounts.get(category.id) ?? 0;
 
-            return (
-              <button
-                key={division.id}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                onClick={() => {
-                  setSelectedDivision(division.id);
-                  setActionError(null);
-                }}
-                style={
-                  isSelected
-                    ? {
-                        backgroundColor: division.color,
-                        borderColor: division.color,
-                        color: division.textColor,
-                      }
-                    : {
-                        backgroundColor: division.softBg,
-                        borderColor: division.softBorder,
-                      }
-                }
-                className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-left transition-all duration-150 flex items-center justify-between gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
-                  isSelected ? 'shadow-xs' : 'text-slate-900 hover:brightness-[0.98]'
-                }`}
-              >
-                <span className="flex items-center gap-2 min-w-0">
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => handleSelectCategory(category.id)}
+                  className={`min-h-[44px] px-2 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
+                    isSelected
+                      ? 'bg-[#3730A3] text-white shadow-xs'
+                      : 'text-slate-700 hover:text-[#3730A3] hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="truncate">{category.label}</span>
                   <span
-                    aria-hidden="true"
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 border ${
-                      isSelected
-                        ? division.textColor === '#FFFFFF'
-                          ? 'border-white/75'
-                          : 'border-slate-900/35'
-                        : 'border-black/10'
+                    className={`text-[11px] sm:text-xs font-semibold tabular-nums shrink-0 ${
+                      isSelected ? 'text-indigo-100' : 'text-slate-500'
                     }`}
-                    style={{ backgroundColor: division.color }}
-                  />
-                  <span className="text-xs sm:text-sm font-semibold truncate">
-                    {getDivisionLabel(division)}
+                  >
+                    ({filled})
                   </span>
-                </span>
-                <span className="text-xs font-semibold tabular-nums shrink-0 opacity-85">
-                  {filled}/{maxSlotsPerDivision}
-                </span>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            role="tablist"
+            aria-label={`Pilih divisi ${getCategoryLabel(activeCategory)}`}
+            className={`grid gap-2 ${
+              categoryDivisions.length === 4
+                ? 'grid-cols-2 sm:grid-cols-4'
+                : 'grid-cols-2 sm:grid-cols-3'
+            }`}
+          >
+            {categoryDivisions.map((division) => {
+              const isSelected = division.id === currentDivisionConfig.id;
+              const filled = divisionCounts.get(division.id) ?? 0;
+
+              return (
+                <button
+                  key={division.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setSelectedDivision(division.id);
+                    setActionError(null);
+                  }}
+                  style={
+                    isSelected
+                      ? {
+                          backgroundColor: division.color,
+                          borderColor: division.color,
+                          color: division.textColor,
+                        }
+                      : {
+                          backgroundColor: division.softBg,
+                          borderColor: division.softBorder,
+                        }
+                  }
+                  className={`min-h-[48px] px-3 py-2.5 rounded-xl border text-left transition-all duration-150 flex items-center justify-between gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
+                    isSelected ? 'shadow-xs' : 'text-slate-900 hover:brightness-[0.98]'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span
+                      aria-hidden="true"
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 border ${
+                        isSelected
+                          ? division.textColor === '#FFFFFF'
+                            ? 'border-white/75'
+                            : 'border-slate-900/35'
+                          : 'border-black/10'
+                      }`}
+                      style={{ backgroundColor: division.color }}
+                    />
+                    <span className="text-xs sm:text-sm font-semibold truncate">
+                      {getDivisionLabel(division)}
+                    </span>
+                  </span>
+                  <span className="text-xs font-semibold tabular-nums shrink-0 opacity-85">
+                    {filled}/{maxSlotsPerDivision}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -687,13 +773,13 @@ export function TeamRosterTab({
       {isLoading && teamSlots.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 px-5 py-12 text-center text-sm text-slate-500 flex items-center justify-center gap-2">
           <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-slate-400" />
-          <span>Memuat susunan team...</span>
+          <span>Memuat lineup...</span>
         </div>
       ) : trimmedQuery ? (
         searchResults.matchedTeams.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 px-5 py-10 text-center text-sm text-slate-500 space-y-3">
             <p>
-              Tidak ada anggota dengan nama &ldquo;{searchQuery.trim()}&rdquo; di susunan team.
+              Tidak ada anggota dengan nama &ldquo;{searchQuery.trim()}&rdquo; di lineup.
             </p>
             {unassignedMatches.length > 0 && (
               <div className="max-w-md mx-auto rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-left space-y-1.5">
@@ -889,6 +975,12 @@ export function TeamRosterTab({
             </form>
           </div>
         </div>
+      )}
+      {isPublishModalOpen && (
+        <PublishLineupModal
+          onClose={() => setIsPublishModalOpen(false)}
+          onNotify={onNotify}
+        />
       )}
     </section>
   );

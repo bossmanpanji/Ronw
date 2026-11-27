@@ -1,5 +1,6 @@
 import {
   DIVISIONS,
+  getCategoryLabel,
   makeDivisionTitleKey,
   makeSlotKey,
   makeTeamTitleKey,
@@ -96,10 +97,11 @@ export function downloadTeamRosterCsv(
     titleMap.set(item.title_key, item.title);
   }
 
-  const headers = ['Divisi', 'Team', 'Slot', 'Nick In Game', 'Job'];
+  const headers = ['Kategori', 'Divisi', 'Team', 'Slot', 'Nick In Game', 'Job'];
   const rows: (string | number)[][] = [];
 
   for (const division of DIVISIONS) {
+    const categoryLabel = getCategoryLabel(division.category);
     const divisionLabel = titleMap.get(makeDivisionTitleKey(division.id)) ?? division.label;
     for (let team = 1; team <= TEAMS_PER_DIVISION; team += 1) {
       const teamLabel = titleMap.get(makeTeamTitleKey(division.id, team)) ?? `Team ${team}`;
@@ -108,6 +110,7 @@ export function downloadTeamRosterCsv(
         const member = slot ? signupMap.get(slot.signup_id) : undefined;
         if (member) {
           rows.push([
+            categoryLabel,
             divisionLabel,
             teamLabel,
             slotNum,
@@ -120,7 +123,7 @@ export function downloadTeamRosterCsv(
   }
 
   const csv = buildCsvContent(headers, rows);
-  triggerCsvDownload(`java-glitch-susunan-team-${getTodayDateSlug()}.csv`, csv);
+  triggerCsvDownload(`java-glitch-lineup-${getTodayDateSlug()}.csv`, csv);
 }
 
 export function downloadFixedPartiesCsv(
