@@ -11,6 +11,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { getJobByName } from '../constants/jobs';
 import {
   DIVISIONS,
@@ -634,19 +635,28 @@ export function TeamRosterTab({
                   role="tab"
                   aria-selected={isSelected}
                   onClick={() => handleSelectCategory(category.id)}
-                  className={`min-h-[44px] px-2 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
+                  className={`relative min-h-[44px] px-2 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 ${
                     isSelected
-                      ? 'bg-[#3730A3] text-white shadow-xs'
+                      ? 'text-white'
                       : 'text-slate-700 hover:text-[#3730A3] hover:bg-slate-50'
                   }`}
                 >
-                  <span className="truncate">{category.label}</span>
-                  <span
-                    className={`text-[11px] sm:text-xs font-semibold tabular-nums shrink-0 ${
-                      isSelected ? 'text-indigo-100' : 'text-slate-500'
-                    }`}
-                  >
-                    ({filled})
+                  {isSelected && (
+                    <motion.span
+                      layoutId="active-lineup-category-bg"
+                      transition={{ type: 'spring', stiffness: 450, damping: 34 }}
+                      className="absolute inset-0 rounded-xl bg-[#3730A3] shadow-xs"
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center justify-center gap-1.5 min-w-0">
+                    <span className="truncate">{category.label}</span>
+                    <span
+                      className={`text-[11px] sm:text-xs font-semibold tabular-nums shrink-0 ${
+                        isSelected ? 'text-indigo-100' : 'text-slate-500'
+                      }`}
+                    >
+                      ({filled})
+                    </span>
                   </span>
                 </button>
               );
@@ -828,11 +838,27 @@ export function TeamRosterTab({
           </div>
         )
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-          {teamNumbers.map((teamNumber) =>
-            renderTeamCard(currentDivisionConfig, teamNumber, false),
-          )}
-        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={`${activeCategory}:${currentDivisionConfig.id}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+            }}
+            exit={{
+              opacity: 0,
+              y: -4,
+              transition: { duration: 0.12, ease: [0.4, 0, 1, 1] },
+            }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start"
+          >
+            {teamNumbers.map((teamNumber) =>
+              renderTeamCard(currentDivisionConfig, teamNumber, false),
+            )}
+          </motion.div>
+        </AnimatePresence>
       )}
 
       {pickerTarget && (

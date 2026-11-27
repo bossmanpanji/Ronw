@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Shield, UserPlus, Users } from 'lucide-react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { GuildInfoCard } from './components/GuildInfoCard';
 import { JobSummaryCard } from './components/JobSummaryCard';
 import { PartyTetapTab } from './components/PartyTetapTab';
@@ -165,7 +165,8 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen bg-slate-50 text-slate-900">
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-6 sm:space-y-8">
         <header className="max-w-2xl mx-auto text-center space-y-1.5">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-balance">
@@ -232,50 +233,61 @@ export default function App() {
           </div>
         </nav>
 
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-        >
-          {activeTab === 'signup' ? (
-            <div className="max-w-2xl mx-auto space-y-8 sm:space-y-10">
-              <RegistrationForm onSuccess={refreshAll} onNotify={showToast} />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
+            }}
+            exit={{
+              opacity: 0,
+              y: -6,
+              transition: { duration: 0.15, ease: [0.4, 0, 1, 1] },
+            }}
+          >
+            {activeTab === 'signup' ? (
+              <div className="max-w-2xl mx-auto space-y-8 sm:space-y-10">
+                <RegistrationForm onSuccess={refreshAll} onNotify={showToast} />
 
-              <JobSummaryCard signups={signups} isLoading={isSignupsLoading} />
+                <JobSummaryCard signups={signups} isLoading={isSignupsLoading} />
 
-              <SignupList
+                <SignupList
+                  signups={signups}
+                  isLoading={isSignupsLoading}
+                  error={signupsError}
+                  onRefresh={refreshAll}
+                />
+              </div>
+            ) : activeTab === 'roster' ? (
+              <TeamRosterTab
                 signups={signups}
-                isLoading={isSignupsLoading}
-                error={signupsError}
+                teamSlots={teamSlots}
+                rosterTitles={rosterTitles}
+                isLoading={isSignupsLoading || isSlotsLoading}
+                error={slotsError ?? signupsError}
                 onRefresh={refreshAll}
+                onNotify={showToast}
               />
-            </div>
-          ) : activeTab === 'roster' ? (
-            <TeamRosterTab
-              signups={signups}
-              teamSlots={teamSlots}
-              rosterTitles={rosterTitles}
-              isLoading={isSignupsLoading || isSlotsLoading}
-              error={slotsError ?? signupsError}
-              onRefresh={refreshAll}
-              onNotify={showToast}
-            />
-          ) : (
-            <PartyTetapTab
-              signups={signups}
-              parties={fixedParties}
-              partySlots={fixedPartySlots}
-              isLoading={isSignupsLoading || isPartiesLoading}
-              error={partiesError ?? signupsError}
-              onRefresh={refreshAll}
-              onNotify={showToast}
-            />
-          )}
-        </motion.div>
+            ) : (
+              <PartyTetapTab
+                signups={signups}
+                parties={fixedParties}
+                partySlots={fixedPartySlots}
+                isLoading={isSignupsLoading || isPartiesLoading}
+                error={partiesError ?? signupsError}
+                onRefresh={refreshAll}
+                onNotify={showToast}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       <Toast toast={toast} onDismiss={dismissToast} />
     </div>
+    </MotionConfig>
   );
 }

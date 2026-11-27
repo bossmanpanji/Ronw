@@ -19,6 +19,8 @@ const FIXED_PARTY_SLOTS_TABLE = 'guild_league_fixed_party_slots';
 const ROSTER_TITLES_TABLE = 'guild_league_roster_titles';
 const SETTINGS_TABLE = 'guild_league_settings';
 const GUILD_LOGO_SETTING_KEY = 'guild_logo';
+const PUBLISH_MESSAGE_ID_KEY = 'publish_message_id';
+const PUBLISH_MESSAGE_EN_KEY = 'publish_message_en';
 
 let clientInstance: SupabaseClient | null = null;
 
@@ -577,6 +579,84 @@ export async function saveGuildLogo(dataUrl: string): Promise<void> {
   if (error) {
     throw new Error(
       toFriendlyErrorMessage(error, 'Gagal menyimpan logo guild ke database. Silakan coba lagi.'),
+    );
+  }
+}
+
+export interface PublishLineupMessages {
+  idMessage: string | null;
+  enMessage: string | null;
+}
+
+export async function fetchPublishLineupMessages(): Promise<PublishLineupMessages> {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { idMessage: null, enMessage: null };
+  }
+
+  const { data, error } = await client
+    .from(SETTINGS_TABLE)
+    .select('setting_key, setting_value')
+    .in('setting_key', [PUBLISH_MESSAGE_ID_KEY, PUBLISH_MESSAGE_EN_KEY]);
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return { idMessage: null, enMessage: null };
+    }
+    throw new Error(
+      toFriendlyErrorMessage(error, 'Gagal memuat pesan publikasi. Silakan coba muat ulang.'),
+    );
+  }
+
+  let idMessage: string | null = null;
+  let enMessage: string | null = null;
+
+  for (const row of (data ?? []) as { setting_key?: unknown; setting_value?: unknown }[]) {
+    if (row.setting_key === PUBLISH_MESSAGE_ID_KEY && typeof row.setting_value === 'string') {
+      idMessage = row.setting_value;
+    } else if (
+      row.setting_key === PUBLISH_MESSAGE_EN_KEY &&
+      typeof row.setting_value === 'string'
+    ) {
+      enMessage = row.setting_value;
+    }
+  }
+
+  return { idMessage, enMessage };
+}
+
+export async function savePublishLineupMessages(params: {
+  idMessage: string;
+  enMessage: string;
+}): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error(getMissingConfigMessage() ?? 'Konfigurasi Supabase belum lengkap.');
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await client.from(SETTINGS_TABLE).upsert(
+    [
+      {
+        setting_key: PUBLISH_MESSAGE_ID_KEY,
+        setting_value: params.idMessage,
+        updated_at: now,
+      },
+      {
+        setting_key: PUBLISH_MESSAGE_EN_KEY,
+        setting_value: params.enMessage,
+        updated_at: now,
+      },
+    ],
+    { onConflict: 'setting_key' },
+  );
+
+  if (error) {
+    throw new Error(
+      toFriendlyErrorMessage(
+        error,
+        'Gagal menyimpan pesan publikasi ke database. Silakan coba lagi.',
+      ),
     );
   }
 }

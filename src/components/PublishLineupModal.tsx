@@ -1,18 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AlertCircle,
   Check,
   Copy,
   ExternalLink,
   Eye,
   Link2,
+  Loader2,
   MessageCircle,
+  RotateCcw,
+  Save,
   X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { fetchPublishLineupMessages, savePublishLineupMessages } from '../lib/supabase';
 import type { ToastData } from './Toast';
 
 const MEMBER_PAGE_DISPLAY_URL = 'javaglitch.vercel.app';
 const MEMBER_PAGE_FULL_URL = 'https://javaglitch.vercel.app';
+const PUBLISH_MESSAGES_CACHE_KEY = 'javaglitch-publish-messages-v1';
 
 const DEFAULT_MESSAGE_ID =
   `📢 Lineup sudah keluar! Cek posisi kamu di ${MEMBER_PAGE_DISPLAY_URL} — berhalangan hadir? Segera konfirmasi di halaman yang sama`;
@@ -25,6 +31,41 @@ type CopiedTarget = 'id' | 'en' | 'link' | null;
 interface PublishLineupModalProps {
   onClose: () => void;
   onNotify: (toast: Omit<ToastData, 'id'>) => void;
+}
+
+interface CachedPublishMessages {
+  idMessage: string;
+  enMessage: string;
+}
+
+function readCachedMessages(): CachedPublishMessages {
+  try {
+    const raw = window.localStorage.getItem(PUBLISH_MESSAGES_CACHE_KEY);
+    if (!raw) {
+      return { idMessage: DEFAULT_MESSAGE_ID, enMessage: DEFAULT_MESSAGE_EN };
+    }
+    const parsed = JSON.parse(raw) as Partial<CachedPublishMessages>;
+    return {
+      idMessage:
+        typeof parsed.idMessage === 'string' && parsed.idMessage.trim().length > 0
+          ? parsed.idMessage
+          : DEFAULT_MESSAGE_ID,
+      enMessage:
+        typeof parsed.enMessage === 'string' && parsed.enMessage.trim().length > 0
+          ? parsed.enMessage
+          : DEFAULT_MESSAGE_EN,
+    };
+  } catch {
+    return { idMessage: DEFAULT_MESSAGE_ID, enMessage: DEFAULT_MESSAGE_EN };
+  }
+}
+
+function writeCachedMessages(messages: CachedPublishMessages): void {
+  try {
+    window.localStorage.setItem(PUBLISH_MESSAGES_CACHE_KEY, JSON.stringify(messages));
+  } catch {
+    // Ignore local storage quota errors
+  }
 }
 
 async function copyTextToClipboard(text: string): Promise<boolean> {
@@ -56,19 +97,72 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
 }
 
 export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProps) {
-  const [messageId, setMessageId] = useState(DEFAULT_MESSAGE_ID);
-  const [messageEn, setMessageEn] = useState(DEFAULT_MESSAGE_EN);
+  const initialCached = readCachedMessages();
+
+  const [messageId, setMessageId] = useState(initialCached.idMessage);
+  const [messageEn, setMessageEn] = useState(initialCached.enMessage);
+  const [savedIdMessage, setSavedIdMessage] = useState(initialCached.idMessage);
+  const [savedEnMessage, setSavedEnMessage] = useState(initialCached.enMessage);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>(null);
+
+  const hasEditedLocallyRef = useRef(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSavedMessages() {
+      try {
+        const remote = await fetchPublishLineupMessages();
+        if (!isMounted) return;
+
+        const nextId =
+          remote.idMessage && remote.idMessage.trim().length > 0
+            ? remote.idMessage
+            : DEFAULT_MESSAGE_ID;
+        const nextEn =
+          remote.enMessage && remote.enMessage.trim().length > 0
+            ? remote.enMessage
+            : DEFAULT_MESSAGE_EN;
+
+        if (remote.idMessage !== null || remote.enMessage !== null) {
+          setSavedIdMessage(nextId);
+          setSavedEnMessage(nextEn);
+          writeCachedMessages({ idMessage: nextId, enMessage: nextEn });
+
+          if (!hasEditedLocallyRef.current) {
+            setMessageId(nextId);
+            setMessageEn(nextEn);
+          }
+        }
+      } catch {
+        // Keep cached/default messages silently if fetch fails
+      } finally {
+        if (isMounted) {
+          setIsLoadingMessages(false);
+        }
+      }
+    }
+
+    void loadSavedMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === 'Escape') {
+      if (event.key === 'Escape' && !isSaving) {
         onClose();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [isSaving, onClose]);
 
   useEffect(() => {
     if (!copiedTarget) return;
@@ -77,6 +171,73 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
     }, 2000);
     return () => window.clearTimeout(timer);
   }, [copiedTarget]);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = window.setTimeout(() => {
+      setJustSaved(false);
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [justSaved]);
+
+  const hasUnsavedChanges =
+    messageId !== savedIdMessage || messageEn !== savedEnMessage;
+
+  const isDifferentFromDefault =
+    messageId !== DEFAULT_MESSAGE_ID || messageEn !== DEFAULT_MESSAGE_EN;
+
+  async function handleSaveMessages() {
+    if (isSaving) return;
+
+    const cleanId = messageId.trim();
+    const cleanEn = messageEn.trim();
+
+    if (!cleanId || !cleanEn) {
+      setSaveError('Pesan Indonesia dan English tidak boleh kosong.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await savePublishLineupMessages({
+        idMessage: cleanId,
+        enMessage: cleanEn,
+      });
+
+      setMessageId(cleanId);
+      setMessageEn(cleanEn);
+      setSavedIdMessage(cleanId);
+      setSavedEnMessage(cleanEn);
+      hasEditedLocallyRef.current = false;
+      writeCachedMessages({ idMessage: cleanId, enMessage: cleanEn });
+      setJustSaved(true);
+
+      onNotify({
+        type: 'success',
+        title: 'Pesan publikasi tersimpan',
+        message: 'Perubahan pesan akan tetap tersimpan untuk dibuka kembali nanti.',
+      });
+    } catch (error) {
+      const msg =
+        error instanceof Error
+          ? error.message
+          : 'Gagal menyimpan pesan publikasi. Silakan coba lagi.';
+      setSaveError(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function handleResetDefault() {
+    if (isSaving) return;
+    hasEditedLocallyRef.current = true;
+    setMessageId(DEFAULT_MESSAGE_ID);
+    setMessageEn(DEFAULT_MESSAGE_EN);
+    setSaveError(null);
+    setJustSaved(false);
+  }
 
   async function handleCopy(target: Exclude<CopiedTarget, null>, text: string, label: string) {
     const ok = await copyTextToClipboard(text);
@@ -98,7 +259,9 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/45 backdrop-blur-[2px] p-0 sm:p-4 overflow-y-auto"
-      onClick={onClose}
+      onClick={() => {
+        if (!isSaving) onClose();
+      }}
     >
       <motion.div
         role="dialog"
@@ -113,8 +276,9 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
         <button
           type="button"
           onClick={onClose}
+          disabled={isSaving}
           aria-label="Tutup popup publikasi"
-          className="absolute top-3.5 right-3.5 min-h-[44px] min-w-[44px] rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3]"
+          className="absolute top-3.5 right-3.5 min-h-[44px] min-w-[44px] rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] disabled:opacity-50"
         >
           <X aria-hidden="true" className="w-4 h-4" />
         </button>
@@ -136,11 +300,19 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
         </div>
 
         <div className="mt-5 rounded-2xl bg-[#FFF9EB] border border-amber-200/90 p-4 space-y-3.5">
-          <div className="flex items-center gap-2 text-slate-900">
-            <MessageCircle aria-hidden="true" className="w-4 h-4 text-slate-800 shrink-0" />
-            <span className="text-sm font-bold leading-snug">
-              Pesan untuk chat guild di game (bisa diubah)
-            </span>
+          <div className="flex items-center justify-between gap-2 text-slate-900">
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageCircle aria-hidden="true" className="w-4 h-4 text-slate-800 shrink-0" />
+              <span className="text-sm font-bold leading-snug">
+                Pesan untuk chat guild di game (bisa diubah)
+              </span>
+            </div>
+            {isLoadingMessages && (
+              <Loader2
+                aria-label="Memuat pesan tersimpan"
+                className="w-4 h-4 animate-spin text-amber-700 shrink-0"
+              />
+            )}
           </div>
 
           <div>
@@ -154,8 +326,14 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
               id="publish-message-id"
               rows={3}
               value={messageId}
-              onChange={(e) => setMessageId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] resize-y"
+              disabled={isSaving}
+              onChange={(e) => {
+                hasEditedLocallyRef.current = true;
+                setMessageId(e.target.value);
+                if (saveError) setSaveError(null);
+                if (justSaved) setJustSaved(false);
+              }}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] resize-y disabled:opacity-60"
             />
             <button
               type="button"
@@ -187,8 +365,14 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
               id="publish-message-en"
               rows={3}
               value={messageEn}
-              onChange={(e) => setMessageEn(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] resize-y"
+              disabled={isSaving}
+              onChange={(e) => {
+                hasEditedLocallyRef.current = true;
+                setMessageEn(e.target.value);
+                if (saveError) setSaveError(null);
+                if (justSaved) setJustSaved(false);
+              }}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 leading-relaxed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] resize-y disabled:opacity-60"
             />
             <button
               type="button"
@@ -207,6 +391,55 @@ export function PublishLineupModal({ onClose, onNotify }: PublishLineupModalProp
                 </>
               )}
             </button>
+          </div>
+
+          {saveError && (
+            <div
+              role="alert"
+              className="rounded-xl bg-red-50 border border-red-200 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-red-900 flex items-start gap-2"
+            >
+              <AlertCircle aria-hidden="true" className="w-4 h-4 text-red-700 shrink-0 mt-0.5" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
+          <div className="pt-1 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleSaveMessages()}
+              disabled={isSaving || !hasUnsavedChanges}
+              className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl bg-[#3730A3] hover:bg-[#312E81] active:scale-[0.99] text-white font-semibold text-sm transition-all inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] focus-visible:ring-offset-1 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
+                  <span>Menyimpan...</span>
+                </>
+              ) : justSaved && !hasUnsavedChanges ? (
+                <>
+                  <Check aria-hidden="true" className="w-4 h-4 stroke-[2.5]" />
+                  <span>Pesan Tersimpan</span>
+                </>
+              ) : (
+                <>
+                  <Save aria-hidden="true" className="w-4 h-4" />
+                  <span>Simpan Pesan</span>
+                </>
+              )}
+            </button>
+
+            {isDifferentFromDefault && (
+              <button
+                type="button"
+                onClick={handleResetDefault}
+                disabled={isSaving}
+                title="Kembalikan teks ke template awal"
+                className="min-h-[44px] px-3.5 py-2.5 rounded-xl border border-amber-300 bg-white hover:bg-amber-50 text-slate-700 font-semibold text-xs sm:text-sm transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3730A3] disabled:opacity-60"
+              >
+                <RotateCcw aria-hidden="true" className="w-4 h-4" />
+                <span>Reset</span>
+              </button>
+            )}
           </div>
         </div>
 
